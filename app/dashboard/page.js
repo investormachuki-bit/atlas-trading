@@ -13,6 +13,8 @@ export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [progressText, setProgressText] = useState("");
   const [error, setError] = useState("");
   const [results, setResults] = useState(null);
 
@@ -39,10 +41,42 @@ export default function Dashboard() {
     window.location.href = "/login";
   }
 
+  async function apiCall(body, token) {
+    const response = await fetch(BACKTEST_API, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
+      body: JSON.stringify(body)
+    });
+
+    let data;
+
+    try {
+      data = await response.json();
+    } catch {
+      throw new Error(
+        `Backtest API returned HTTP ${response.status}`
+      );
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data.error ||
+        `Backtest failed with HTTP ${response.status}`
+      );
+    }
+
+    return data;
+  }
+
   async function runBacktest() {
     setRunning(true);
     setError("");
     setResults(null);
+    setProgress(0);
+    setProgressText("Starting backtest...");
 
     try {
       const {
@@ -54,31 +88,95 @@ export default function Dashboard() {
         return;
       }
 
-      const response = await fetch(BACKTEST_API, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session.access_token}`
-        },
-        body: JSON.stringify({
+      const token = session.access_token;
+
+      /*
+       * STEP 1
+       * Create the persistent backtest job.
+       */
+      const start = await apiCall(
+        {
+          action: "start",
           market_id: MARKET_ID,
           strategy_id: STRATEGY_ID,
           timeframe: "M5",
           risk_reward: 2,
-          risk_per_trade: 0.01,
-          limit: 100000
-        })
-      });
+          risk_per_trade: 0.01
+        },
+        token
+      );
 
-      const data = await response.json();
+      const jobId = start.job_id;
+      const total = Number(start.total_candles || 329103);
 
-      if (!response.ok) {
-        throw new Error(data.error || "Backtest failed");
+      setProgressText(
+        `Job created · ${total.toLocaleString()} candles`
+      );
+
+      /*
+       * STEP 2
+       * Process the dataset chunk-by-chunk.
+       */
+      let finished = false;
+
+      while (!finished) {
+        const step = await apiCall(
+          {
+            action: "step",
+            job_id: jobId,
+            risk_reward: 2,
+            risk_per_trade: 0.01
+          },
+          token
+        );
+
+        if (step.status === "running") {
+          const tested =
+            step.progress?.candles_tested || 0;
+
+          const percent =
+            step.progress?.percent ||
+            Math.min(99, (tested / total) * 100);
+
+          setProgress(percent);
+
+          setProgressText(
+            `${tested.toLocaleString()} / ${total.toLocaleString()} candles`
+          );
+
+          /*
+           * Give the browser a tiny pause between chunks.
+           */
+          await new Promise(resolve =>
+            setTimeout(resolve, 80)
+          );
+
+          continue;
+        }
+
+        if (step.status === "complete") {
+          finished = true;
+
+          setProgress(100);
+          setProgressText(
+            "Complete · 329,103 candles tested"
+          );
+
+          setResults(step.results);
+        } else {
+          throw new Error(
+            "Unexpected backtest status"
+          );
+        }
       }
 
-      setResults(data);
     } catch (err) {
-      setError(err.message || "Unable to run backtest");
+      console.error(err);
+
+      setError(
+        err.message ||
+        "Unable to complete backtest"
+      );
     } finally {
       setRunning(false);
     }
@@ -98,7 +196,10 @@ export default function Dashboard() {
 
         <header style={styles.header}>
           <div>
-            <div style={styles.logo}>ATLAS</div>
+            <div style={styles.logo}>
+              ATLAS
+            </div>
+
             <div style={styles.subtitle}>
               Trading Intelligence
             </div>
@@ -122,7 +223,7 @@ export default function Dashboard() {
           </h1>
 
           <div style={styles.marketSubtitle}>
-            5-Minute · Historical Dataset
+            5-Minute · 5-Year Historical Dataset
           </div>
         </section>
 
@@ -145,7 +246,7 @@ export default function Dashboard() {
 
           <StatCard
             label="Engine"
-            value="READY"
+            value={running ? "RUNNING" : "READY"}
           />
 
         </section>
@@ -161,8 +262,8 @@ export default function Dashboard() {
           </h2>
 
           <p style={styles.description}>
-            Run the ATLAS Trend Continuation strategy
-            against XAUUSD M5 historical data.
+            Run ATLAS Trend Continuation against
+            the complete five-year XAUUSD M5 dataset.
           </p>
 
           <div style={styles.parameters}>
@@ -190,15 +291,46 @@ export default function Dashboard() {
 
           </div>
 
+          {running && (
+            <div style={styles.progressBox}>
+
+              <div style={styles.progressHeader}>
+                <span>
+                  BACKTESTING
+                </span>
+
+                <strong>
+                  {progress.toFixed(1)}%
+                </strong>
+              </div>
+
+              <div style={styles.progressTrack}>
+                <div
+                  style={{
+                    ...styles.progressBar,
+                    width: `${progress}%`
+                  }}
+                />
+              </div>
+
+              <div style={styles.progressText}>
+                {progressText}
+              </div>
+
+            </div>
+          )}
+
           <button
             onClick={runBacktest}
             disabled={running}
             style={{
               ...styles.runButton,
-              opacity: running ? 0.65 : 1
+              opacity: running ? 0.55 : 1
             }}
           >
-            {running ? "RUNNING BACKTEST..." : "RUN BACKTEST"}
+            {running
+              ? "BACKTEST RUNNING..."
+              : "RUN BACKTEST"}
           </button>
 
           {error && (
@@ -217,22 +349,40 @@ export default function Dashboard() {
             </div>
 
             <h2 style={styles.panelTitle}>
-              Backtest Complete
+              Five-Year Backtest Complete
             </h2>
+
+            <div style={styles.coverage}>
+              <strong>
+                {Number(
+                  results.candles_tested
+                ).toLocaleString()}
+              </strong>
+
+              {" "}candles tested
+
+              {results.complete && (
+                <span>
+                  {" "}· COMPLETE DATASET
+                </span>
+              )}
+            </div>
 
             <div style={styles.resultsGrid}>
 
               <ResultCard
                 label="Trades"
-                value={results.results?.trades ?? "—"}
+                value={
+                  results.trades ?? "—"
+                }
               />
 
               <ResultCard
                 label="Win Rate"
                 value={
-                  results.results?.win_rate != null
+                  results.win_rate != null
                     ? `${(
-                        results.results.win_rate * 100
+                        results.win_rate * 100
                       ).toFixed(2)}%`
                     : "—"
                 }
@@ -241,9 +391,9 @@ export default function Dashboard() {
               <ResultCard
                 label="Profit Factor"
                 value={
-                  results.results?.profit_factor != null
+                  results.profit_factor != null
                     ? Number(
-                        results.results.profit_factor
+                        results.profit_factor
                       ).toFixed(2)
                     : "—"
                 }
@@ -252,9 +402,9 @@ export default function Dashboard() {
               <ResultCard
                 label="Expectancy"
                 value={
-                  results.results?.expectancy_R != null
+                  results.expectancy_R != null
                     ? `${Number(
-                        results.results.expectancy_R
+                        results.expectancy_R
                       ).toFixed(3)} R`
                     : "—"
                 }
@@ -263,9 +413,9 @@ export default function Dashboard() {
               <ResultCard
                 label="Total R"
                 value={
-                  results.results?.total_R != null
+                  results.total_R != null
                     ? `${Number(
-                        results.results.total_R
+                        results.total_R
                       ).toFixed(2)} R`
                     : "—"
                 }
@@ -274,9 +424,9 @@ export default function Dashboard() {
               <ResultCard
                 label="Max Drawdown"
                 value={
-                  results.results?.max_drawdown != null
+                  results.max_drawdown != null
                     ? `${(
-                        results.results.max_drawdown * 100
+                        results.max_drawdown * 100
                       ).toFixed(2)}%`
                     : "—"
                 }
@@ -285,30 +435,30 @@ export default function Dashboard() {
               <ResultCard
                 label="Equity Multiple"
                 value={
-                  results.results?.equity_multiple != null
+                  results.equity_multiple != null
                     ? `${Number(
-                        results.results.equity_multiple
+                        results.equity_multiple
                       ).toFixed(3)}x`
                     : "—"
                 }
               />
 
               <ResultCard
-                label="Data Tested"
+                label="Test Trades"
                 value={
-                  results.results?.trades
-                    ? `${results.results.trades} trades`
-                    : "—"
+                  results.test_trades ?? "—"
                 }
               />
 
             </div>
 
             <div style={styles.notice}>
-              This first connection uses the current API
-              limit of 100,000 candles. The next engine
-              upgrade will process the complete 329,103-candle
-              five-year dataset.
+              <strong>
+                Full historical coverage:
+              </strong>{" "}
+              {results.complete
+                ? "ATLAS processed the complete 329,103-candle dataset."
+                : "The dataset was not completely processed."}
             </div>
 
           </section>
@@ -478,6 +628,38 @@ const styles = {
     marginBottom: "6px"
   },
 
+  progressBox: {
+    marginBottom: "18px"
+  },
+
+  progressHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    color: "#8d96a8",
+    fontSize: "12px",
+    marginBottom: "8px"
+  },
+
+  progressTrack: {
+    height: "8px",
+    background: "#080b12",
+    borderRadius: "20px",
+    overflow: "hidden"
+  },
+
+  progressBar: {
+    height: "100%",
+    background: "#ffffff",
+    borderRadius: "20px",
+    transition: "width 0.2s ease"
+  },
+
+  progressText: {
+    marginTop: "8px",
+    color: "#7f899b",
+    fontSize: "12px"
+  },
+
   runButton: {
     width: "100%",
     padding: "16px",
@@ -495,6 +677,11 @@ const styles = {
     borderRadius: "10px",
     background: "#251318",
     color: "#ff9b9b"
+  },
+
+  coverage: {
+    color: "#8d96a8",
+    marginTop: "18px"
   },
 
   resultsGrid: {
