@@ -9,6 +9,8 @@ const STRATEGY_ID = "22aab602-2282-4393-bd9c-efa82171b6d5";
 const BACKTEST_API =
   "https://ookqbnpjtiqixamacalv.supabase.co/functions/v1/backtest-api";
 
+const TOTAL_CANDLES = 329103;
+
 export default function Dashboard() {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -64,7 +66,7 @@ export default function Dashboard() {
     if (!response.ok) {
       throw new Error(
         data.error ||
-        `Backtest failed with HTTP ${response.status}`
+          `Backtest failed with HTTP ${response.status}`
       );
     }
 
@@ -90,10 +92,6 @@ export default function Dashboard() {
 
       const token = session.access_token;
 
-      /*
-       * STEP 1
-       * Create the persistent backtest job.
-       */
       const start = await apiCall(
         {
           action: "start",
@@ -107,16 +105,14 @@ export default function Dashboard() {
       );
 
       const jobId = start.job_id;
-      const total = Number(start.total_candles || 329103);
+      const total = Number(
+        start.total_candles || TOTAL_CANDLES
+      );
 
       setProgressText(
         `Job created · ${total.toLocaleString()} candles`
       );
 
-      /*
-       * STEP 2
-       * Process the dataset chunk-by-chunk.
-       */
       let finished = false;
 
       while (!finished) {
@@ -144,10 +140,7 @@ export default function Dashboard() {
             `${tested.toLocaleString()} / ${total.toLocaleString()} candles`
           );
 
-          /*
-           * Give the browser a tiny pause between chunks.
-           */
-          await new Promise(resolve =>
+          await new Promise((resolve) =>
             setTimeout(resolve, 80)
           );
 
@@ -159,7 +152,7 @@ export default function Dashboard() {
 
           setProgress(100);
           setProgressText(
-            "Complete · 329,103 candles tested"
+            `Complete · ${total.toLocaleString()} candles tested`
           );
 
           setResults(step.results);
@@ -169,13 +162,12 @@ export default function Dashboard() {
           );
         }
       }
-
     } catch (err) {
       console.error(err);
 
       setError(
         err.message ||
-        "Unable to complete backtest"
+          "Unable to complete backtest"
       );
     } finally {
       setRunning(false);
@@ -193,6 +185,8 @@ export default function Dashboard() {
   return (
     <main style={styles.page}>
       <div style={styles.container}>
+
+        {/* HEADER */}
 
         <header style={styles.header}>
           <div>
@@ -213,6 +207,8 @@ export default function Dashboard() {
           </button>
         </header>
 
+        {/* MARKET */}
+
         <section>
           <div style={styles.eyebrow}>
             RESEARCH MARKET
@@ -223,15 +219,17 @@ export default function Dashboard() {
           </h1>
 
           <div style={styles.marketSubtitle}>
-            5-Minute · 5-Year Historical Dataset
+            5-Minute · Historical Dataset
           </div>
         </section>
+
+        {/* MARKET STATS */}
 
         <section style={styles.grid}>
 
           <StatCard
             label="Candles"
-            value="329,103"
+            value={TOTAL_CANDLES.toLocaleString()}
           />
 
           <StatCard
@@ -246,10 +244,16 @@ export default function Dashboard() {
 
           <StatCard
             label="Engine"
-            value={running ? "RUNNING" : "READY"}
+            value={
+              running
+                ? "RUNNING"
+                : "READY"
+            }
           />
 
         </section>
+
+        {/* BACKTEST LAB */}
 
         <section style={styles.panel}>
 
@@ -263,7 +267,8 @@ export default function Dashboard() {
 
           <p style={styles.description}>
             Run ATLAS Trend Continuation against
-            the complete five-year XAUUSD M5 dataset.
+            the complete five-year XAUUSD M5
+            historical dataset.
           </p>
 
           <div style={styles.parameters}>
@@ -272,6 +277,7 @@ export default function Dashboard() {
               <span style={styles.parameterLabel}>
                 Risk / Trade
               </span>
+
               <strong>1%</strong>
             </div>
 
@@ -279,6 +285,7 @@ export default function Dashboard() {
               <span style={styles.parameterLabel}>
                 Risk / Reward
               </span>
+
               <strong>1 : 2</strong>
             </div>
 
@@ -286,6 +293,7 @@ export default function Dashboard() {
               <span style={styles.parameterLabel}>
                 Timeframe
               </span>
+
               <strong>M5</strong>
             </div>
 
@@ -341,127 +349,136 @@ export default function Dashboard() {
 
         </section>
 
+        {/* RESULTS */}
+
         {results && (
-          <section style={styles.panel}>
+          <>
+            <section style={styles.panel}>
 
-            <div style={styles.eyebrow}>
-              RESULTS
-            </div>
+              <div style={styles.eyebrow}>
+                RESULTS
+              </div>
 
-            <h2 style={styles.panelTitle}>
-              Five-Year Backtest Complete
-            </h2>
+              <h2 style={styles.panelTitle}>
+                Five-Year Backtest Complete
+              </h2>
 
-            <div style={styles.coverage}>
-              <strong>
-                {Number(
-                  results.candles_tested
-                ).toLocaleString()}
-              </strong>
+              <div style={styles.coverage}>
+                <strong>
+                  {Number(
+                    results.candles_tested || 0
+                  ).toLocaleString()}
+                </strong>{" "}
+                candles tested
 
-              {" "}candles tested
+                {results.complete && (
+                  <span>
+                    {" "}· COMPLETE DATASET
+                  </span>
+                )}
+              </div>
 
-              {results.complete && (
-                <span>
-                  {" "}· COMPLETE DATASET
-                </span>
-              )}
-            </div>
+              <div style={styles.resultsGrid}>
 
-            <div style={styles.resultsGrid}>
+                <ResultCard
+                  label="Trades"
+                  value={
+                    results.trades ?? "—"
+                  }
+                />
 
-              <ResultCard
-                label="Trades"
-                value={
-                  results.trades ?? "—"
-                }
-              />
+                <ResultCard
+                  label="Win Rate"
+                  value={
+                    results.win_rate != null
+                      ? `${(
+                          results.win_rate * 100
+                        ).toFixed(2)}%`
+                      : "—"
+                  }
+                />
 
-              <ResultCard
-                label="Win Rate"
-                value={
-                  results.win_rate != null
-                    ? `${(
-                        results.win_rate * 100
-                      ).toFixed(2)}%`
-                    : "—"
-                }
-              />
+                <ResultCard
+                  label="Profit Factor"
+                  value={
+                    results.profit_factor != null
+                      ? Number(
+                          results.profit_factor
+                        ).toFixed(2)
+                      : "—"
+                  }
+                />
 
-              <ResultCard
-                label="Profit Factor"
-                value={
-                  results.profit_factor != null
-                    ? Number(
-                        results.profit_factor
-                      ).toFixed(2)
-                    : "—"
-                }
-              />
+                <ResultCard
+                  label="Expectancy"
+                  value={
+                    results.expectancy_R != null
+                      ? `${Number(
+                          results.expectancy_R
+                        ).toFixed(3)} R`
+                      : "—"
+                  }
+                />
 
-              <ResultCard
-                label="Expectancy"
-                value={
-                  results.expectancy_R != null
-                    ? `${Number(
-                        results.expectancy_R
-                      ).toFixed(3)} R`
-                    : "—"
-                }
-              />
+                <ResultCard
+                  label="Total R"
+                  value={
+                    results.total_R != null
+                      ? `${Number(
+                          results.total_R
+                        ).toFixed(2)} R`
+                      : "—"
+                  }
+                />
 
-              <ResultCard
-                label="Total R"
-                value={
-                  results.total_R != null
-                    ? `${Number(
-                        results.total_R
-                      ).toFixed(2)} R`
-                    : "—"
-                }
-              />
+                <ResultCard
+                  label="Max Drawdown"
+                  value={
+                    results.max_drawdown != null
+                      ? `${(
+                          results.max_drawdown * 100
+                        ).toFixed(2)}%`
+                      : "—"
+                  }
+                />
 
-              <ResultCard
-                label="Max Drawdown"
-                value={
-                  results.max_drawdown != null
-                    ? `${(
-                        results.max_drawdown * 100
-                      ).toFixed(2)}%`
-                    : "—"
-                }
-              />
+                <ResultCard
+                  label="Equity Multiple"
+                  value={
+                    results.equity_multiple != null
+                      ? `${Number(
+                          results.equity_multiple
+                        ).toFixed(3)}x`
+                      : "—"
+                  }
+                />
 
-              <ResultCard
-                label="Equity Multiple"
-                value={
-                  results.equity_multiple != null
-                    ? `${Number(
-                        results.equity_multiple
-                      ).toFixed(3)}x`
-                    : "—"
-                }
-              />
+                <ResultCard
+                  label="Test Trades"
+                  value={
+                    results.test_trades ?? "—"
+                  }
+                />
 
-              <ResultCard
-                label="Test Trades"
-                value={
-                  results.test_trades ?? "—"
-                }
-              />
+              </div>
 
-            </div>
+              <div style={styles.notice}>
+                <strong>
+                  Full historical coverage:
+                </strong>{" "}
+                {results.complete
+                  ? `ATLAS processed the complete ${TOTAL_CANDLES.toLocaleString()}-candle dataset.`
+                  : "The dataset was not completely processed."}
+              </div>
 
-            <div style={styles.notice}>
-              <strong>
-                Full historical coverage:
-              </strong>{" "}
-              {results.complete
-                ? "ATLAS processed the complete 329,103-candle dataset."
-                : "The dataset was not completely processed."}
-            </div>
+            </section>
 
-          </section>
+            {/* RESEARCH DIAGNOSTICS */}
+
+            <ResearchDiagnostics
+              results={results}
+            />
+          </>
         )}
 
         <div style={styles.account}>
@@ -472,6 +489,223 @@ export default function Dashboard() {
     </main>
   );
 }
+
+
+/* ============================================================
+   RESEARCH DIAGNOSTICS
+   ============================================================ */
+
+function ResearchDiagnostics({ results }) {
+  const pf = Number(
+    results.profit_factor
+  );
+
+  const expectancy = Number(
+    results.expectancy_R
+  );
+
+  const totalR = Number(
+    results.total_R
+  );
+
+  const drawdown = Number(
+    results.max_drawdown
+  );
+
+  const trades = Number(
+    results.trades ??
+      results.test_trades ??
+      0
+  );
+
+  const checks = {
+
+    profitability:
+      Number.isFinite(pf) &&
+      pf > 1,
+
+    expectancy:
+      Number.isFinite(expectancy) &&
+      expectancy > 0,
+
+    equity:
+      Number.isFinite(totalR) &&
+      totalR > 0,
+
+    sample:
+      trades >= 100,
+
+    drawdown:
+      Number.isFinite(drawdown) &&
+      drawdown < 0.25
+  };
+
+  const positiveChecks = Object.values(
+    checks
+  ).filter(Boolean).length;
+
+  let verdict = "INCONCLUSIVE";
+  let verdictMessage =
+    "ATLAS needs more evidence before judging the strategy.";
+
+  if (
+    checks.profitability &&
+    checks.expectancy &&
+    checks.equity &&
+    positiveChecks >= 4
+  ) {
+    verdict = "POSITIVE EDGE";
+    verdictMessage =
+      "The current test shows evidence of a potentially usable statistical edge.";
+  } else if (
+    !checks.profitability ||
+    !checks.expectancy ||
+    !checks.equity
+  ) {
+    verdict = "NO EDGE";
+    verdictMessage =
+      "The current test does not demonstrate a positive trading edge.";
+  } else if (
+    checks.sample &&
+    positiveChecks >= 3
+  ) {
+    verdict = "PROMISING";
+    verdictMessage =
+      "The strategy shows encouraging characteristics but requires further validation.";
+  }
+
+  return (
+    <section style={styles.panel}>
+
+      <div style={styles.eyebrow}>
+        RESEARCH DIAGNOSTICS
+      </div>
+
+      <h2 style={styles.panelTitle}>
+        Statistical Edge Assessment
+      </h2>
+
+      <p style={styles.description}>
+        ATLAS evaluates the backtest using
+        profitability, expectancy, equity
+        growth, sample size and drawdown.
+      </p>
+
+      <div
+        style={{
+          ...styles.verdict,
+          borderColor:
+            verdict === "POSITIVE EDGE"
+              ? "#315f42"
+              : verdict === "NO EDGE"
+              ? "#6b3038"
+              : "#394052"
+        }}
+      >
+
+        <div style={styles.verdictLabel}>
+          CURRENT VERDICT
+        </div>
+
+        <div
+          style={{
+            ...styles.verdictTitle,
+            color:
+              verdict === "POSITIVE EDGE"
+                ? "#a8e6bb"
+                : verdict === "NO EDGE"
+                ? "#ff9b9b"
+                : "#d3d9e5"
+          }}
+        >
+          {verdict}
+        </div>
+
+        <div style={styles.verdictMessage}>
+          {verdictMessage}
+        </div>
+
+      </div>
+
+      <div style={styles.diagnosticGrid}>
+
+        <Diagnostic
+          label="Profit Factor"
+          passed={checks.profitability}
+          detail={
+            Number.isFinite(pf)
+              ? `${pf.toFixed(2)} · target > 1.00`
+              : "Unavailable"
+          }
+        />
+
+        <Diagnostic
+          label="Expectancy"
+          passed={checks.expectancy}
+          detail={
+            Number.isFinite(expectancy)
+              ? `${expectancy.toFixed(3)} R · target > 0`
+              : "Unavailable"
+          }
+        />
+
+        <Diagnostic
+          label="Net Result"
+          passed={checks.equity}
+          detail={
+            Number.isFinite(totalR)
+              ? `${totalR.toFixed(2)} R · target > 0`
+              : "Unavailable"
+          }
+        />
+
+        <Diagnostic
+          label="Sample Size"
+          passed={checks.sample}
+          detail={
+            `${trades.toLocaleString()} trades · minimum 100`
+          }
+        />
+
+        <Diagnostic
+          label="Drawdown"
+          passed={checks.drawdown}
+          detail={
+            Number.isFinite(drawdown)
+              ? `${(
+                  drawdown * 100
+                ).toFixed(2)}% · research limit < 25%`
+              : "Unavailable"
+          }
+        />
+
+      </div>
+
+      <div style={styles.researchNote}>
+
+        <strong>
+          ATLAS interpretation
+        </strong>
+
+        <p style={styles.researchNoteText}>
+          A high number of trades does not
+          automatically mean a strategy has
+          an edge. ATLAS requires positive
+          expectancy and a Profit Factor above
+          1 before treating the strategy as
+          potentially profitable.
+        </p>
+
+      </div>
+
+    </section>
+  );
+}
+
+
+/* ============================================================
+   COMPONENTS
+   ============================================================ */
 
 function StatCard({ label, value }) {
   return (
@@ -487,6 +721,7 @@ function StatCard({ label, value }) {
   );
 }
 
+
 function ResultCard({ label, value }) {
   return (
     <div style={styles.resultCard}>
@@ -501,7 +736,49 @@ function ResultCard({ label, value }) {
   );
 }
 
+
+function Diagnostic({
+  label,
+  passed,
+  detail
+}) {
+  return (
+    <div style={styles.diagnosticCard}>
+
+      <div style={styles.diagnosticTop}>
+
+        <span style={styles.cardLabel}>
+          {label}
+        </span>
+
+        <span
+          style={{
+            ...styles.status,
+            color: passed
+              ? "#a8e6bb"
+              : "#ff9b9b"
+          }}
+        >
+          {passed ? "PASS" : "FAIL"}
+        </span>
+
+      </div>
+
+      <div style={styles.diagnosticDetail}>
+        {detail}
+      </div>
+
+    </div>
+  );
+}
+
+
+/* ============================================================
+   STYLES
+   ============================================================ */
+
 const styles = {
+
   page: {
     minHeight: "100vh",
     background: "#080b12",
@@ -714,9 +991,83 @@ const styles = {
     lineHeight: 1.5
   },
 
+  verdict: {
+    marginTop: "24px",
+    padding: "22px",
+    background: "#080b12",
+    border: "1px solid",
+    borderRadius: "14px"
+  },
+
+  verdictLabel: {
+    color: "#7f899b",
+    fontSize: "11px",
+    letterSpacing: "1.5px"
+  },
+
+  verdictTitle: {
+    fontSize: "28px",
+    fontWeight: "700",
+    marginTop: "8px"
+  },
+
+  verdictMessage: {
+    color: "#8d96a8",
+    marginTop: "8px",
+    lineHeight: 1.5
+  },
+
+  diagnosticGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: "14px",
+    marginTop: "20px"
+  },
+
+  diagnosticCard: {
+    background: "#080b12",
+    border: "1px solid #1e2738",
+    borderRadius: "12px",
+    padding: "18px"
+  },
+
+  diagnosticTop: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center"
+  },
+
+  status: {
+    fontSize: "11px",
+    fontWeight: "700",
+    letterSpacing: "1px"
+  },
+
+  diagnosticDetail: {
+    color: "#a0a9ba",
+    fontSize: "13px",
+    lineHeight: 1.5
+  },
+
+  researchNote: {
+    marginTop: "22px",
+    padding: "18px",
+    borderRadius: "12px",
+    background: "#0b1019",
+    color: "#9da8bb",
+    fontSize: "13px",
+    lineHeight: 1.5
+  },
+
+  researchNoteText: {
+    margin: "8px 0 0"
+  },
+
   account: {
     marginTop: "28px",
     color: "#596477",
     fontSize: "12px"
   }
+
 };
