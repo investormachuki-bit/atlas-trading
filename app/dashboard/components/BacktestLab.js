@@ -3,7 +3,8 @@
 import {
   TIMEFRAME,
   RISK_PER_TRADE,
-  RISK_REWARD
+  RISK_REWARD,
+  TOTAL_CANDLES
 } from "../lib/constants";
 
 export default function BacktestLab({
@@ -21,33 +22,58 @@ export default function BacktestLab({
       </div>
 
       <h2 style={styles.panelTitle}>
-        Trend Continuation
+        Research Configuration
       </h2>
 
       <p style={styles.description}>
-        Run ATLAS Trend Continuation against
-        the complete five-year XAUUSD M5
-        historical dataset.
+        Test the ATLAS Trend Continuation
+        strategy against the complete
+        historical XAUUSD dataset.
       </p>
 
-      <div style={styles.parameters}>
 
-        <Parameter
-          label="Risk / Trade"
-          value={`${RISK_PER_TRADE * 100}%`}
+      {/* ======================================================
+          CONFIGURATION
+         ====================================================== */}
+
+      <div style={styles.configGrid}>
+
+        <ConfigItem
+          label="Strategy"
+          value="Trend Continuation"
         />
 
-        <Parameter
-          label="Risk / Reward"
-          value={`1 : ${RISK_REWARD}`}
+        <ConfigItem
+          label="Market"
+          value="XAUUSD"
         />
 
-        <Parameter
+        <ConfigItem
           label="Timeframe"
           value={TIMEFRAME}
         />
 
+        <ConfigItem
+          label="Risk / Trade"
+          value={`${RISK_PER_TRADE * 100}%`}
+        />
+
+        <ConfigItem
+          label="Risk / Reward"
+          value={`1 : ${RISK_REWARD}`}
+        />
+
+        <ConfigItem
+          label="Dataset"
+          value={`${TOTAL_CANDLES.toLocaleString()} candles`}
+        />
+
       </div>
+
+
+      {/* ======================================================
+          PROGRESS
+         ====================================================== */}
 
       {running && (
         <Progress
@@ -55,6 +81,11 @@ export default function BacktestLab({
           text={progressText}
         />
       )}
+
+
+      {/* ======================================================
+          RUN
+         ====================================================== */}
 
       <button
         onClick={onRun}
@@ -69,6 +100,11 @@ export default function BacktestLab({
           : "RUN BACKTEST"}
       </button>
 
+
+      {/* ======================================================
+          ERROR
+         ====================================================== */}
+
       {error && (
         <div style={styles.error}>
           {error}
@@ -81,22 +117,24 @@ export default function BacktestLab({
 
 
 /* ============================================================
-   PARAMETER
+   CONFIG ITEM
    ============================================================ */
 
-function Parameter({
+function ConfigItem({
   label,
   value
 }) {
   return (
-    <div>
-      <span style={styles.parameterLabel}>
-        {label}
-      </span>
+    <div style={styles.configItem}>
 
-      <strong>
+      <div style={styles.parameterLabel}>
+        {label}
+      </div>
+
+      <div style={styles.configValue}>
         {value}
-      </strong>
+      </div>
+
     </div>
   );
 }
@@ -112,7 +150,10 @@ function Progress({
 }) {
   const safeProgress = Math.min(
     100,
-    Math.max(0, Number(progress) || 0)
+    Math.max(
+      0,
+      Number(progress) || 0
+    )
   );
 
   return (
@@ -130,14 +171,18 @@ function Progress({
 
       </div>
 
+
       <div style={styles.progressTrack}>
+
         <div
           style={{
             ...styles.progressBar,
             width: `${safeProgress}%`
           }}
         />
+
       </div>
+
 
       <div style={styles.progressText}>
         {text}
@@ -180,19 +225,33 @@ const styles = {
     maxWidth: "700px"
   },
 
-  parameters: {
+  configGrid: {
     display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(120px, 1fr))",
-    gap: "16px",
-    margin: "24px 0"
+      "repeat(auto-fit, minmax(170px, 1fr))",
+    gap: "12px",
+    marginTop: "24px",
+    marginBottom: "24px"
+  },
+
+  configItem: {
+    background: "#080b12",
+    border: "1px solid #1e2738",
+    borderRadius: "12px",
+    padding: "16px"
   },
 
   parameterLabel: {
-    display: "block",
     color: "#7f899b",
     fontSize: "12px",
-    marginBottom: "6px"
+    marginBottom: "7px"
+  },
+
+  configValue: {
+    color: "#ffffff",
+    fontSize: "15px",
+    fontWeight: "700",
+    lineHeight: 1.4
   },
 
   progressBox: {
