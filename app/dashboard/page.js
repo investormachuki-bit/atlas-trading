@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { supabase } from "../lib/supabase";
+import { supabase } from "../../lib/supabase";
 
 import DashboardHeader from "./components/DashboardHeader";
 import MarketHeader from "./components/MarketHeader";
