@@ -16,4 +16,4 @@ export const RISK_REWARD = 2;
 export const TOTAL_CANDLES = 329103;
 
 export const RESEARCH_API =
-  "YOUR_SUPABASE_RESEARCH_ENGINE_URL";
+  "https://ookqbnpjtiqixamacalv.supabase.co/functions/v1/research-engine";
