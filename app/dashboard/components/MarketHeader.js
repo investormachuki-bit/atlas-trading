@@ -22,6 +22,11 @@ export default function MarketHeader({
   );
 }
 
+
+/* ============================================================
+   STYLES
+   ============================================================ */
+
 const styles = {
   section: {
     marginBottom: "0"
