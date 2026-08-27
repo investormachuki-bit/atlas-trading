@@ -18,14 +18,40 @@ export default function BacktestResults({
   const complete =
     results.complete === true;
 
+  const diagnostics =
+    results.diagnostics || {};
+
+  const sessions =
+    diagnostics.sessions || {};
+
+  const directions =
+    diagnostics.directions || {};
+
+  const volatility =
+    diagnostics.volatility || {};
+
+  const years =
+    diagnostics.years || {};
+
+  const months =
+    diagnostics.months || {};
+
+  const exitReasons =
+    diagnostics.exit_reasons || {};
+
   return (
     <section style={styles.panel}>
+
+      {/* ======================================================
+         HEADER
+         ====================================================== */}
+
       <div style={styles.eyebrow}>
-        RESULTS
+        BACKTEST RESULTS
       </div>
 
       <h2 style={styles.panelTitle}>
-        Five-Year Backtest Complete
+        Five-Year Research Results
       </h2>
 
       <div style={styles.coverage}>
@@ -41,6 +67,16 @@ export default function BacktestResults({
         )}
       </div>
 
+
+      {/* ======================================================
+         CORE PERFORMANCE
+         ====================================================== */}
+
+      <ResearchSection
+        title="Core Performance"
+        subtitle="Primary measures of strategy performance."
+      />
+
       <div style={styles.resultsGrid}>
 
         <ResultCard
@@ -55,9 +91,7 @@ export default function BacktestResults({
           value={
             results.win_rate != null
               ? `${(
-                  Number(
-                    results.win_rate
-                  ) * 100
+                  Number(results.win_rate) * 100
                 ).toFixed(2)}%`
               : "—"
           }
@@ -129,15 +163,154 @@ export default function BacktestResults({
 
       </div>
 
+
+      {/* ======================================================
+         TRADE BEHAVIOUR
+         ====================================================== */}
+
+      <ResearchSection
+        title="Trade Behaviour"
+        subtitle="How the strategy behaves once trades are triggered."
+      />
+
+      <div style={styles.resultsGrid}>
+
+        <ResultCard
+          label="Average MFE"
+          value={
+            diagnostics.average_MFE_R != null
+              ? `${Number(
+                  diagnostics.average_MFE_R
+                ).toFixed(3)} R`
+              : "—"
+          }
+        />
+
+        <ResultCard
+          label="Average MAE"
+          value={
+            diagnostics.average_MAE_R != null
+              ? `${Number(
+                  diagnostics.average_MAE_R
+                ).toFixed(3)} R`
+              : "—"
+          }
+        />
+
+        <ResultCard
+          label="Max Consecutive Losses"
+          value={
+            diagnostics.max_consecutive_losses ??
+            "—"
+          }
+        />
+
+      </div>
+
+
+      {/* ======================================================
+         EDGE BREAKDOWN
+         ====================================================== */}
+
+      <ResearchSection
+        title="Edge Breakdown"
+        subtitle="Where the strategy performs and where it struggles."
+      />
+
+      <Breakdown
+        title="Direction"
+        data={directions}
+      />
+
+      <Breakdown
+        title="Trading Session"
+        data={sessions}
+      />
+
+      <Breakdown
+        title="Volatility"
+        data={volatility}
+      />
+
+      <Breakdown
+        title="Exit Reasons"
+        data={exitReasons}
+      />
+
+
+      {/* ======================================================
+         YEARLY PERFORMANCE
+         ====================================================== */}
+
+      <ResearchSection
+        title="Year-by-Year Performance"
+        subtitle="Consistency of the edge across the historical period."
+      />
+
+      <Breakdown
+        title="Years"
+        data={years}
+        showRows
+      />
+
+
+      {/* ======================================================
+         MONTHLY PERFORMANCE
+         ====================================================== */}
+
+      <ResearchSection
+        title="Monthly Performance"
+        subtitle="Distribution of performance across individual months."
+      />
+
+      <Breakdown
+        title="Months"
+        data={months}
+        showRows
+      />
+
+
+      {/* ======================================================
+         HISTORICAL COVERAGE
+         ====================================================== */}
+
       <div style={styles.notice}>
+
         <strong>
           Historical coverage:
         </strong>{" "}
+
         {complete
           ? `ATLAS processed the complete ${TOTAL_CANDLES.toLocaleString()}-candle dataset.`
           : `ATLAS processed ${candlesTested.toLocaleString()} of ${TOTAL_CANDLES.toLocaleString()} candles.`}
+
       </div>
+
     </section>
+  );
+}
+
+
+/* ============================================================
+   RESEARCH SECTION
+   ============================================================ */
+
+function ResearchSection({
+  title,
+  subtitle
+}) {
+  return (
+    <div style={styles.sectionHeader}>
+
+      <h3 style={styles.sectionTitle}>
+        {title}
+      </h3>
+
+      <div style={styles.sectionSubtitle}>
+        {subtitle}
+      </div>
+
+    </div>
   );
 }
 
@@ -152,6 +325,7 @@ function ResultCard({
 }) {
   return (
     <div style={styles.resultCard}>
+
       <div style={styles.cardLabel}>
         {label}
       </div>
@@ -159,6 +333,118 @@ function ResultCard({
       <div style={styles.resultValue}>
         {value}
       </div>
+
+    </div>
+  );
+}
+
+
+/* ============================================================
+   BREAKDOWN
+   ============================================================ */
+
+function Breakdown({
+  title,
+  data,
+  showRows = false
+}) {
+  const entries =
+    Object.entries(data || {});
+
+  if (!entries.length) {
+    return (
+      <div style={styles.empty}>
+        {title} data unavailable.
+      </div>
+    );
+  }
+
+  return (
+    <div style={styles.breakdown}>
+
+      <div style={styles.breakdownTitle}>
+        {title}
+      </div>
+
+      <div style={styles.breakdownGrid}>
+
+        {entries.map(
+          ([key, value]) => {
+
+            const trades =
+              Number(
+                value?.trades || 0
+              );
+
+            const winRate =
+              Number(
+                value?.win_rate || 0
+              );
+
+            const expectancy =
+              Number(
+                value?.expectancy_R || 0
+              );
+
+            const totalR =
+              Number(
+                value?.totalR || 0
+              );
+
+            return (
+              <div
+                key={key}
+                style={styles.breakdownCard}
+              >
+
+                <div style={styles.breakdownName}>
+                  {key}
+                </div>
+
+                <div style={styles.breakdownStats}>
+
+                  <span>
+                    {trades.toLocaleString()} trades
+                  </span>
+
+                  <span>
+                    {(winRate * 100).toFixed(1)}% win
+                  </span>
+
+                </div>
+
+                <div
+                  style={{
+                    ...styles.breakdownResult,
+                    color:
+                      expectancy > 0
+                        ? "#a8e6bb"
+                        : "#ff9b9b"
+                  }}
+                >
+                  {expectancy >= 0
+                    ? "+"
+                    : ""}
+                  {expectancy.toFixed(3)} R expectancy
+                </div>
+
+                {showRows && (
+                  <div style={styles.totalR}>
+                    Total:{" "}
+                    {totalR >= 0
+                      ? "+"
+                      : ""}
+                    {totalR.toFixed(2)} R
+                  </div>
+                )}
+
+              </div>
+            );
+          }
+        )}
+
+      </div>
+
     </div>
   );
 }
@@ -169,6 +455,7 @@ function ResultCard({
    ============================================================ */
 
 const styles = {
+
   panel: {
     background: "#101520",
     border: "1px solid #1e2738",
@@ -194,12 +481,27 @@ const styles = {
     marginTop: "18px"
   },
 
+  sectionHeader: {
+    marginTop: "30px",
+    marginBottom: "14px"
+  },
+
+  sectionTitle: {
+    fontSize: "18px",
+    margin: "0 0 5px"
+  },
+
+  sectionSubtitle: {
+    color: "#687386",
+    fontSize: "12px",
+    lineHeight: 1.5
+  },
+
   resultsGrid: {
     display: "grid",
     gridTemplateColumns:
       "repeat(auto-fit, minmax(140px, 1fr))",
-    gap: "14px",
-    marginTop: "20px"
+    gap: "14px"
   },
 
   resultCard: {
@@ -211,8 +513,8 @@ const styles = {
 
   cardLabel: {
     color: "#7f899b",
-    fontSize: "14px",
-    marginBottom: "10px"
+    fontSize: "13px",
+    marginBottom: "9px"
   },
 
   resultValue: {
@@ -220,8 +522,67 @@ const styles = {
     fontWeight: "700"
   },
 
+  breakdown: {
+    marginTop: "14px"
+  },
+
+  breakdownTitle: {
+    color: "#9da8bb",
+    fontSize: "13px",
+    marginBottom: "10px"
+  },
+
+  breakdownGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "10px"
+  },
+
+  breakdownCard: {
+    background: "#080b12",
+    border: "1px solid #1e2738",
+    borderRadius: "12px",
+    padding: "14px"
+  },
+
+  breakdownName: {
+    fontSize: "14px",
+    fontWeight: "700",
+    marginBottom: "8px"
+  },
+
+  breakdownStats: {
+    display: "flex",
+    justifyContent: "space-between",
+    gap: "8px",
+    color: "#7f899b",
+    fontSize: "11px"
+  },
+
+  breakdownResult: {
+    marginTop: "10px",
+    fontSize: "13px",
+    fontWeight: "600"
+  },
+
+  totalR: {
+    marginTop: "5px",
+    color: "#687386",
+    fontSize: "11px"
+  },
+
+  empty: {
+    padding: "14px",
+    background: "#080b12",
+    border: "1px solid #1e2738",
+    borderRadius: "10px",
+    color: "#687386",
+    fontSize: "12px"
+  },
+
   notice: {
-    marginTop: "22px",
+    marginTop: "26px",
     padding: "14px",
     borderRadius: "10px",
     background: "#0b1019",
@@ -229,4 +590,5 @@ const styles = {
     fontSize: "13px",
     lineHeight: 1.5
   }
+
 };
