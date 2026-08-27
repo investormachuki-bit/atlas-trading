@@ -12,40 +12,30 @@ import BacktestResults from "./components/BacktestResults";
 import ResearchDiagnostics from "./components/ResearchDiagnostics";
 
 import {
-  MARKET_ID,
-  STRATEGY_ID,
   TIMEFRAME,
-  RISK_PER_TRADE,
-  RISK_REWARD,
   TOTAL_CANDLES
 } from "./lib/constants";
 
-import {
-  startBacktest,
-  stepBacktest
-} from "./lib/backtestApi";
+import useBacktest from "./hooks/useBacktest";
 
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  const [loading, setLoading] =
-    useState(true);
 
-  const [running, setRunning] =
-    useState(false);
+  /* ==========================================================
+     BACKTEST ENGINE
+     ========================================================== */
 
-  const [progress, setProgress] =
-    useState(0);
-
-  const [progressText, setProgressText] =
-    useState("");
-
-  const [error, setError] =
-    useState("");
-
-  const [results, setResults] =
-    useState(null);
+  const {
+    running,
+    progress,
+    progressText,
+    error,
+    results,
+    runBacktest
+  } = useBacktest();
 
 
   /* ==========================================================
@@ -83,182 +73,22 @@ export default function Dashboard() {
 
 
   /* ==========================================================
-     RUN BACKTEST
+     START BACKTEST
      ========================================================== */
 
-  async function runBacktest() {
-    setRunning(true);
-    setError("");
-    setResults(null);
-    setProgress(0);
-    setProgressText(
-      "Starting backtest..."
-    );
+  async function handleRunBacktest() {
+    const {
+      data: { session }
+    } = await supabase.auth.getSession();
 
-    try {
-      const {
-        data: { session }
-      } = await supabase.auth.getSession();
-
-      if (!session?.access_token) {
-        window.location.href = "/login";
-        return;
-      }
-
-      const token =
-        session.access_token;
-
-
-      /* --------------------------------------------------------
-         START JOB
-         -------------------------------------------------------- */
-
-      const start =
-        await startBacktest(
-          token,
-          {
-            marketId: MARKET_ID,
-            strategyId: STRATEGY_ID,
-            timeframe: TIMEFRAME,
-            riskReward: RISK_REWARD,
-            riskPerTrade: RISK_PER_TRADE
-          }
-        );
-
-
-      const jobId =
-        start.job_id;
-
-      const total =
-        Number(
-          start.total_candles ||
-          TOTAL_CANDLES
-        );
-
-
-      setProgressText(
-        `Job created · ${total.toLocaleString()} candles`
-      );
-
-
-      /* --------------------------------------------------------
-         PROCESS DATASET
-         -------------------------------------------------------- */
-
-      let finished = false;
-
-      while (!finished) {
-
-        const step =
-          await stepBacktest(
-            jobId,
-            token,
-            {
-              riskReward:
-                RISK_REWARD,
-
-              riskPerTrade:
-                RISK_PER_TRADE
-            }
-          );
-
-
-        /* ------------------------------------------------------
-           JOB STILL RUNNING
-           ------------------------------------------------------ */
-
-        if (
-          step.status === "running"
-        ) {
-
-          const tested =
-            Number(
-              step.progress
-                ?.candles_tested || 0
-            );
-
-
-          const percent =
-            step.progress?.percent != null
-              ? Number(
-                  step.progress.percent
-                )
-              : Math.min(
-                  99,
-                  (tested / total) * 100
-                );
-
-
-          setProgress(percent);
-
-          setProgressText(
-            `${tested.toLocaleString()} / ${total.toLocaleString()} candles`
-          );
-
-
-          /*
-           * Small pause prevents the browser
-           * from hammering the API continuously.
-           */
-
-          await new Promise(
-            (resolve) =>
-              setTimeout(resolve, 80)
-          );
-
-          continue;
-        }
-
-
-        /* ------------------------------------------------------
-           JOB COMPLETE
-           ------------------------------------------------------ */
-
-        if (
-          step.status === "complete"
-        ) {
-
-          finished = true;
-
-          setProgress(100);
-
-          setProgressText(
-            `Complete · ${total.toLocaleString()} candles tested`
-          );
-
-          setResults(
-            step.results
-          );
-
-          continue;
-        }
-
-
-        /* ------------------------------------------------------
-           UNKNOWN STATUS
-           ------------------------------------------------------ */
-
-        throw new Error(
-          "Unexpected backtest status"
-        );
-      }
-
-    } catch (err) {
-
-      console.error(
-        "Backtest error:",
-        err
-      );
-
-      setError(
-        err?.message ||
-        "Unable to complete backtest."
-      );
-
-    } finally {
-
-      setRunning(false);
+    if (!session?.access_token) {
+      window.location.href = "/login";
+      return;
     }
+
+    await runBacktest(
+      session.access_token
+    );
   }
 
 
@@ -312,7 +142,7 @@ export default function Dashboard() {
           running={running}
           progress={progress}
           progressText={progressText}
-          onRun={runBacktest}
+          onRun={handleRunBacktest}
           error={error}
         />
 
