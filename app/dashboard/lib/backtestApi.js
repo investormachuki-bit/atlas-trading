@@ -1,39 +1,105 @@
 import { BACKTEST_API } from "./constants";
 
+
+/* ============================================================
+   API CONFIGURATION
+   ============================================================ */
+
+const REQUEST_TIMEOUT = 30000;
+
+
 /* ============================================================
    GENERIC API CALL
    ============================================================ */
 
 export async function apiCall(body, token) {
-  const response = await fetch(BACKTEST_API, {
-    method: "POST",
+  if (!token) {
+    throw new Error(
+      "Authentication session is missing. Please sign in again."
+    );
+  }
 
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${token}`
-    },
+  const controller = new AbortController();
 
-    body: JSON.stringify(body)
-  });
-
-  let data;
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, REQUEST_TIMEOUT);
 
   try {
-    data = await response.json();
-  } catch {
-    throw new Error(
-      `Backtest API returned HTTP ${response.status}`
-    );
-  }
+    const response = await fetch(BACKTEST_API, {
+      method: "POST",
 
-  if (!response.ok) {
-    throw new Error(
-      data?.error ||
-        `Backtest failed with HTTP ${response.status}`
-    );
-  }
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`
+      },
 
-  return data;
+      body: JSON.stringify(body),
+
+      signal: controller.signal
+    });
+
+    const contentType =
+      response.headers.get("content-type") || "";
+
+    let data = null;
+
+    if (contentType.includes("application/json")) {
+      try {
+        data = await response.json();
+      } catch {
+        throw new Error(
+          `Backtest API returned invalid JSON (HTTP ${response.status}).`
+        );
+      }
+    } else {
+      const text = await response.text();
+
+      if (text) {
+        data = {
+          error: text
+        };
+      }
+    }
+
+    if (!response.ok) {
+      throw new Error(
+        data?.error ||
+          data?.message ||
+          `Backtest API returned HTTP ${response.status}.`
+      );
+    }
+
+    if (!data) {
+      throw new Error(
+        "Backtest API returned an empty response."
+      );
+    }
+
+    return data;
+
+  } catch (error) {
+
+    if (error?.name === "AbortError") {
+      throw new Error(
+        "Backtest request timed out. The server may still be processing the job."
+      );
+    }
+
+    if (
+      error instanceof TypeError &&
+      error.message === "Failed to fetch"
+    ) {
+      throw new Error(
+        "Unable to connect to the backtest engine. Check your connection and try again."
+      );
+    }
+
+    throw error;
+
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 
@@ -49,8 +115,20 @@ export async function startBacktest(
     timeframe = "M5",
     riskReward = 2,
     riskPerTrade = 0.01
-  }
+  } = {}
 ) {
+  if (!marketId) {
+    throw new Error(
+      "Market ID is required to start a backtest."
+    );
+  }
+
+  if (!strategyId) {
+    throw new Error(
+      "Strategy ID is required to start a backtest."
+    );
+  }
+
   return apiCall(
     {
       action: "start",
@@ -65,6 +143,7 @@ export async function startBacktest(
 
       risk_per_trade: riskPerTrade
     },
+
     token
   );
 }
@@ -82,6 +161,12 @@ export async function stepBacktest(
     riskPerTrade = 0.01
   } = {}
 ) {
+  if (!jobId) {
+    throw new Error(
+      "Backtest job ID is missing."
+    );
+  }
+
   return apiCall(
     {
       action: "step",
@@ -92,6 +177,7 @@ export async function stepBacktest(
 
       risk_per_trade: riskPerTrade
     },
+
     token
   );
 }
