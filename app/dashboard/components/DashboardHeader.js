@@ -16,6 +16,7 @@ export default function DashboardHeader({
       </div>
 
       <button
+        type="button"
         onClick={onLogout}
         style={styles.logout}
       >
@@ -25,6 +26,10 @@ export default function DashboardHeader({
   );
 }
 
+
+/* ============================================================
+   STYLES
+   ============================================================ */
 
 const styles = {
   header: {
