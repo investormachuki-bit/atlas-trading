@@ -12,35 +12,45 @@ import BacktestResults from "./components/BacktestResults";
 import ResearchDiagnostics from "./components/ResearchDiagnostics";
 
 import {
+  MARKET_ID,
+  STRATEGY_ID,
   TIMEFRAME,
+  RISK_PER_TRADE,
+  RISK_REWARD,
   TOTAL_CANDLES
 } from "./lib/constants";
 
-import useBacktest from "./hooks/useBacktest";
+import {
+  startBacktest,
+  stepBacktest
+} from "./lib/backtestApi";
 
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(true);
+
+  const [loading, setLoading] =
+    useState(true);
+
+  const [running, setRunning] =
+    useState(false);
+
+  const [progress, setProgress] =
+    useState(0);
+
+  const [progressText, setProgressText] =
+    useState("");
+
+  const [error, setError] =
+    useState("");
+
+  const [results, setResults] =
+    useState(null);
 
 
-  /* ==========================================================
-     BACKTEST ENGINE
-     ========================================================== */
-
-  const {
-    running,
-    progress,
-    progressText,
-    error,
-    results,
-    runBacktest
-  } = useBacktest();
-
-
-  /* ==========================================================
+  /* ============================================================
      AUTHENTICATION
-     ========================================================== */
+     ============================================================ */
 
   useEffect(() => {
     async function loadUser() {
@@ -61,9 +71,9 @@ export default function Dashboard() {
   }, []);
 
 
-  /* ==========================================================
+  /* ============================================================
      LOGOUT
-     ========================================================== */
+     ============================================================ */
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -72,29 +82,209 @@ export default function Dashboard() {
   }
 
 
-  /* ==========================================================
-     START BACKTEST
-     ========================================================== */
+  /* ============================================================
+     RUN BACKTEST
+     ============================================================ */
 
-  async function handleRunBacktest() {
-    const {
-      data: { session }
-    } = await supabase.auth.getSession();
-
-    if (!session?.access_token) {
-      window.location.href = "/login";
+  async function runBacktest() {
+    if (running) {
       return;
     }
 
-    await runBacktest(
-      session.access_token
-    );
+    setRunning(true);
+    setError("");
+    setResults(null);
+    setProgress(0);
+    setProgressText("Starting backtest...");
+
+    try {
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+
+      if (!session?.access_token) {
+        window.location.href = "/login";
+        return;
+      }
+
+      const token =
+        session.access_token;
+
+
+      /* --------------------------------------------------------
+         START BACKTEST JOB
+         -------------------------------------------------------- */
+
+      const start =
+        await startBacktest(
+          token,
+          {
+            marketId: MARKET_ID,
+            strategyId: STRATEGY_ID,
+            timeframe: TIMEFRAME,
+            riskReward: RISK_REWARD,
+            riskPerTrade: RISK_PER_TRADE
+          }
+        );
+
+
+      const jobId =
+        start?.job_id;
+
+      if (!jobId) {
+        throw new Error(
+          "Backtest API did not return a job ID."
+        );
+      }
+
+
+      const total =
+        Number(
+          start?.total_candles ||
+          TOTAL_CANDLES
+        );
+
+
+      setProgressText(
+        `Job created · ${total.toLocaleString()} candles`
+      );
+
+
+      /* --------------------------------------------------------
+         PROCESS BACKTEST
+         -------------------------------------------------------- */
+
+      let finished = false;
+
+      while (!finished) {
+
+        const step =
+          await stepBacktest(
+            jobId,
+            token,
+            {
+              riskReward:
+                RISK_REWARD,
+
+              riskPerTrade:
+                RISK_PER_TRADE
+            }
+          );
+
+
+        /* ------------------------------------------------------
+           RUNNING
+           ------------------------------------------------------ */
+
+        if (
+          step?.status === "running"
+        ) {
+
+          const tested =
+            Number(
+              step?.progress
+                ?.candles_tested || 0
+            );
+
+
+          const percent =
+            step?.progress?.percent != null
+              ? Number(
+                  step.progress.percent
+                )
+              : total > 0
+              ? Math.min(
+                  99,
+                  (tested / total) * 100
+                )
+              : 0;
+
+
+          setProgress(
+            Math.min(
+              99,
+              Math.max(
+                0,
+                percent
+              )
+            )
+          );
+
+
+          setProgressText(
+            `${tested.toLocaleString()} / ${total.toLocaleString()} candles`
+          );
+
+
+          /*
+           * Prevent continuous API hammering.
+           */
+
+          await new Promise(
+            (resolve) =>
+              setTimeout(resolve, 80)
+          );
+
+          continue;
+        }
+
+
+        /* ------------------------------------------------------
+           COMPLETE
+           ------------------------------------------------------ */
+
+        if (
+          step?.status === "complete"
+        ) {
+
+          finished = true;
+
+          setProgress(100);
+
+          setProgressText(
+            `Complete · ${total.toLocaleString()} candles tested`
+          );
+
+          setResults(
+            step?.results || null
+          );
+
+          continue;
+        }
+
+
+        /* ------------------------------------------------------
+           UNKNOWN STATUS
+           ------------------------------------------------------ */
+
+        throw new Error(
+          step?.error ||
+          "Unexpected backtest status."
+        );
+      }
+
+    } catch (err) {
+
+      console.error(
+        "ATLAS backtest error:",
+        err
+      );
+
+      setError(
+        err?.message ||
+        "Unable to complete backtest."
+      );
+
+    } finally {
+
+      setRunning(false);
+    }
   }
 
 
-  /* ==========================================================
+  /* ============================================================
      LOADING
-     ========================================================== */
+     ============================================================ */
 
   if (loading) {
     return (
@@ -105,9 +295,9 @@ export default function Dashboard() {
   }
 
 
-  /* ==========================================================
+  /* ============================================================
      DASHBOARD
-     ========================================================== */
+     ============================================================ */
 
   return (
     <main style={styles.page}>
@@ -142,7 +332,7 @@ export default function Dashboard() {
           running={running}
           progress={progress}
           progressText={progressText}
-          onRun={handleRunBacktest}
+          onRun={runBacktest}
           error={error}
         />
 
@@ -158,7 +348,7 @@ export default function Dashboard() {
 
 
         <div style={styles.account}>
-          SIGNED IN AS {user.email}
+          SIGNED IN AS {user?.email}
         </div>
 
       </div>
