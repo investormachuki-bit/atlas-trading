@@ -23,14 +23,29 @@ import {
 import {
   startBacktest,
   stepBacktest
-} from "./lib/backtestApi";
+} from "./lib/api";
+
+import {
+  analyzeBacktest
+} from "./lib/researchApi";
 
 
 export default function Dashboard() {
-  const [user, setUser] = useState(null);
+
+  /* ==========================================================
+     AUTH
+     ========================================================== */
+
+  const [user, setUser] =
+    useState(null);
 
   const [loading, setLoading] =
     useState(true);
+
+
+  /* ==========================================================
+     BACKTEST STATE
+     ========================================================== */
 
   const [running, setRunning] =
     useState(false);
@@ -47,13 +62,32 @@ export default function Dashboard() {
   const [results, setResults] =
     useState(null);
 
+  const [jobId, setJobId] =
+    useState(null);
 
-  /* ============================================================
+
+  /* ==========================================================
+     RESEARCH STATE
+     ========================================================== */
+
+  const [researchRunning, setResearchRunning] =
+    useState(false);
+
+  const [researchResults, setResearchResults] =
+    useState(null);
+
+  const [researchError, setResearchError] =
+    useState("");
+
+
+  /* ==========================================================
      AUTHENTICATION
-     ============================================================ */
+     ========================================================== */
 
   useEffect(() => {
+
     async function loadUser() {
+
       const {
         data: { user }
       } = await supabase.auth.getUser();
@@ -68,42 +102,66 @@ export default function Dashboard() {
     }
 
     loadUser();
+
   }, []);
 
 
-  /* ============================================================
+  /* ==========================================================
      LOGOUT
-     ============================================================ */
+     ========================================================== */
 
   async function handleLogout() {
+
     await supabase.auth.signOut();
 
     window.location.href = "/login";
   }
 
 
-  /* ============================================================
+  /* ==========================================================
      RUN BACKTEST
-     ============================================================ */
+     ========================================================== */
 
   async function runBacktest() {
-    if (running) {
+
+    if (running || researchRunning) {
       return;
     }
 
     setRunning(true);
+
     setError("");
+
     setResults(null);
+
+    setJobId(null);
+
+    setResearchResults(null);
+
+    setResearchError("");
+
     setProgress(0);
-    setProgressText("Starting backtest...");
+
+    setProgressText(
+      "Starting backtest..."
+    );
+
 
     try {
+
+      /* ------------------------------------------------------
+         GET SESSION
+         ------------------------------------------------------ */
+
       const {
         data: { session }
       } = await supabase.auth.getSession();
 
       if (!session?.access_token) {
-        window.location.href = "/login";
+
+        window.location.href =
+          "/login";
+
         return;
       }
 
@@ -111,9 +169,9 @@ export default function Dashboard() {
         session.access_token;
 
 
-      /* --------------------------------------------------------
-         START BACKTEST JOB
-         -------------------------------------------------------- */
+      /* ------------------------------------------------------
+         START JOB
+         ------------------------------------------------------ */
 
       const start =
         await startBacktest(
@@ -128,14 +186,18 @@ export default function Dashboard() {
         );
 
 
-      const jobId =
+      const newJobId =
         start?.job_id;
 
-      if (!jobId) {
+      if (!newJobId) {
+
         throw new Error(
-          "Backtest API did not return a job ID."
+          "Backtest engine did not return a job ID."
         );
       }
+
+
+      setJobId(newJobId);
 
 
       const total =
@@ -150,17 +212,15 @@ export default function Dashboard() {
       );
 
 
-      /* --------------------------------------------------------
-         PROCESS BACKTEST
-         -------------------------------------------------------- */
+      /* ------------------------------------------------------
+         PROCESS JOB
+         ------------------------------------------------------ */
 
-      let finished = false;
-
-      while (!finished) {
+      while (true) {
 
         const step =
           await stepBacktest(
-            jobId,
+            newJobId,
             token,
             {
               riskReward:
@@ -172,9 +232,9 @@ export default function Dashboard() {
           );
 
 
-        /* ------------------------------------------------------
+        /* ----------------------------------------------------
            RUNNING
-           ------------------------------------------------------ */
+           ---------------------------------------------------- */
 
         if (
           step?.status === "running"
@@ -187,17 +247,27 @@ export default function Dashboard() {
             );
 
 
-          const percent =
+          let percent;
+
+          if (
             step?.progress?.percent != null
-              ? Number(
-                  step.progress.percent
-                )
-              : total > 0
-              ? Math.min(
-                  99,
-                  (tested / total) * 100
-                )
-              : 0;
+          ) {
+
+            percent =
+              Number(
+                step.progress.percent
+              );
+
+          } else {
+
+            percent =
+              total > 0
+                ? Math.min(
+                    99,
+                    (tested / total) * 100
+                  )
+                : 0;
+          }
 
 
           setProgress(
@@ -216,28 +286,25 @@ export default function Dashboard() {
           );
 
 
-          /*
-           * Prevent continuous API hammering.
-           */
-
           await new Promise(
-            (resolve) =>
-              setTimeout(resolve, 80)
+            resolve =>
+              setTimeout(
+                resolve,
+                80
+              )
           );
 
           continue;
         }
 
 
-        /* ------------------------------------------------------
+        /* ----------------------------------------------------
            COMPLETE
-           ------------------------------------------------------ */
+           ---------------------------------------------------- */
 
         if (
           step?.status === "complete"
         ) {
-
-          finished = true;
 
           setProgress(100);
 
@@ -245,21 +312,35 @@ export default function Dashboard() {
             `Complete · ${total.toLocaleString()} candles tested`
           );
 
+
           setResults(
             step?.results || null
           );
 
-          continue;
+
+          return;
         }
 
 
-        /* ------------------------------------------------------
-           UNKNOWN STATUS
-           ------------------------------------------------------ */
+        /* ----------------------------------------------------
+           FAILED
+           ---------------------------------------------------- */
+
+        if (
+          step?.status === "failed"
+        ) {
+
+          throw new Error(
+            step?.error ||
+            "The backtest engine reported a failed job."
+          );
+        }
+
 
         throw new Error(
-          step?.error ||
-          "Unexpected backtest status."
+          `Unexpected backtest status: ${
+            step?.status || "unknown"
+          }`
         );
       }
 
@@ -282,11 +363,100 @@ export default function Dashboard() {
   }
 
 
-  /* ============================================================
+  /* ==========================================================
+     RUN RESEARCH
+     ========================================================== */
+
+  async function runResearch() {
+
+    if (
+      researchRunning ||
+      running ||
+      !jobId
+    ) {
+      return;
+    }
+
+
+    setResearchRunning(true);
+
+    setResearchError("");
+
+    setResearchResults(null);
+
+
+    try {
+
+      /* ------------------------------------------------------
+         GET SESSION
+         ------------------------------------------------------ */
+
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+
+
+      if (!session?.access_token) {
+
+        window.location.href =
+          "/login";
+
+        return;
+      }
+
+
+      const token =
+        session.access_token;
+
+
+      /* ------------------------------------------------------
+         RUN RESEARCH ENGINE
+         ------------------------------------------------------ */
+
+      const research =
+        await analyzeBacktest(
+          token,
+          {
+            jobId,
+
+            marketId:
+              MARKET_ID,
+
+            strategyId:
+              STRATEGY_ID
+          }
+        );
+
+
+      setResearchResults(
+        research
+      );
+
+    } catch (err) {
+
+      console.error(
+        "ATLAS research error:",
+        err
+      );
+
+      setResearchError(
+        err?.message ||
+        "Unable to complete research analysis."
+      );
+
+    } finally {
+
+      setResearchRunning(false);
+    }
+  }
+
+
+  /* ==========================================================
      LOADING
-     ============================================================ */
+     ========================================================== */
 
   if (loading) {
+
     return (
       <main style={styles.loading}>
         Loading ATLAS...
@@ -295,19 +465,29 @@ export default function Dashboard() {
   }
 
 
-  /* ============================================================
+  /* ==========================================================
      DASHBOARD
-     ============================================================ */
+     ========================================================== */
 
   return (
+
     <main style={styles.page}>
 
       <div style={styles.container}>
+
+
+        {/* ----------------------------------------------------
+           HEADER
+        ---------------------------------------------------- */}
 
         <DashboardHeader
           onLogout={handleLogout}
         />
 
+
+        {/* ----------------------------------------------------
+           MARKET
+        ---------------------------------------------------- */}
 
         <MarketHeader
           market="XAUUSD"
@@ -316,6 +496,10 @@ export default function Dashboard() {
         />
 
 
+        {/* ----------------------------------------------------
+           MARKET STATS
+        ---------------------------------------------------- */}
+
         <MarketStats
           candles={TOTAL_CANDLES}
           market="XAUUSD"
@@ -323,33 +507,170 @@ export default function Dashboard() {
           engine={
             running
               ? "RUNNING"
+              : researchRunning
+              ? "RESEARCH"
               : "READY"
           }
         />
 
 
+        {/* ----------------------------------------------------
+           BACKTEST LAB
+        ---------------------------------------------------- */}
+
         <BacktestLab
-          running={running}
+          running={
+            running ||
+            researchRunning
+          }
+
           progress={progress}
-          progressText={progressText}
-          onRun={runBacktest}
-          error={error}
+
+          progressText={
+            progressText
+          }
+
+          onRun={
+            runBacktest
+          }
+
+          error={
+            error
+          }
         />
 
+
+        {/* ----------------------------------------------------
+           BACKTEST RESULTS
+        ---------------------------------------------------- */}
 
         <BacktestResults
           results={results}
         />
 
 
+        {/* ----------------------------------------------------
+           RESEARCH ACTION
+        ---------------------------------------------------- */}
+
+        {results && jobId && (
+
+          <section
+            style={styles.researchPanel}
+          >
+
+            <div
+              style={styles.researchEyebrow}
+            >
+              RESEARCH ENGINE
+            </div>
+
+
+            <h2
+              style={styles.researchTitle}
+            >
+              Validate Strategy Robustness
+            </h2>
+
+
+            <p
+              style={styles.researchDescription}
+            >
+              ATLAS will split the completed
+              backtest chronologically, test
+              multiple strategy variations,
+              compare train and test
+              performance, and determine
+              whether the observed edge
+              survives out-of-sample testing.
+            </p>
+
+
+            <div
+              style={styles.researchMeta}
+            >
+
+              <span>
+                BACKTEST JOB
+              </span>
+
+              <strong>
+                {jobId}
+              </strong>
+
+            </div>
+
+
+            <button
+              onClick={runResearch}
+              disabled={
+                researchRunning
+              }
+              style={{
+                ...styles.researchButton,
+                opacity:
+                  researchRunning
+                    ? 0.55
+                    : 1
+              }}
+            >
+
+              {researchRunning
+                ? "RESEARCH RUNNING..."
+                : "RUN RESEARCH"}
+
+            </button>
+
+
+            {researchError && (
+
+              <div
+                style={styles.researchError}
+              >
+                {researchError}
+              </div>
+
+            )}
+
+          </section>
+
+        )}
+
+
+        {/* ----------------------------------------------------
+           RESEARCH RESULTS
+        ---------------------------------------------------- */}
+
+        {researchResults && (
+
+          <ResearchResults
+            data={
+              researchResults
+            }
+          />
+
+        )}
+
+
+        {/* ----------------------------------------------------
+           DIAGNOSTICS
+        ---------------------------------------------------- */}
+
         <ResearchDiagnostics
           results={results}
         />
 
 
-        <div style={styles.account}>
+        {/* ----------------------------------------------------
+           ACCOUNT
+        ---------------------------------------------------- */}
+
+        <div
+          style={styles.account}
+        >
           SIGNED IN AS {user?.email}
         </div>
+
 
       </div>
 
@@ -359,7 +680,164 @@ export default function Dashboard() {
 
 
 /* ============================================================
-   PAGE STYLES
+   RESEARCH RESULTS
+   ============================================================ */
+
+function ResearchResults({
+  data
+}) {
+
+  const verdict =
+    data?.verdict ||
+    data?.research_verdict ||
+    "RESEARCH COMPLETE";
+
+
+  const message =
+    data?.message ||
+    data?.verdict_message ||
+    data?.summary ||
+    "Research analysis completed.";
+
+
+  return (
+
+    <section
+      style={styles.researchResults}
+    >
+
+      <div
+        style={styles.researchEyebrow}
+      >
+        RESEARCH VERDICT
+      </div>
+
+
+      <h2
+        style={styles.researchTitle}
+      >
+        {verdict}
+      </h2>
+
+
+      <p
+        style={styles.researchDescription}
+      >
+        {message}
+      </p>
+
+
+      <ResearchData
+        data={data}
+      />
+
+    </section>
+  );
+}
+
+
+/* ============================================================
+   RESEARCH DATA
+   ============================================================ */
+
+function ResearchData({
+  data
+}) {
+
+  const experiments =
+    data?.experiments ||
+    data?.results ||
+    data?.candidates ||
+    [];
+
+
+  if (
+    !Array.isArray(experiments) ||
+    experiments.length === 0
+  ) {
+
+    return null;
+  }
+
+
+  return (
+
+    <div
+      style={styles.experimentGrid}
+    >
+
+      {experiments.map(
+        (experiment, index) => (
+
+          <div
+            key={
+              experiment?.id ||
+              experiment?.name ||
+              index
+            }
+            style={
+              styles.experimentCard
+            }
+          >
+
+            <div
+              style={
+                styles.experimentName
+              }
+            >
+              {experiment?.name ||
+                experiment?.strategy ||
+                `Experiment ${index + 1}`}
+            </div>
+
+
+            <div
+              style={
+                styles.experimentStats
+              }
+            >
+
+              {experiment?.train_pf != null && (
+                <span>
+                  Train PF:{" "}
+                  {Number(
+                    experiment.train_pf
+                  ).toFixed(2)}
+                </span>
+              )}
+
+              {experiment?.test_pf != null && (
+                <span>
+                  Test PF:{" "}
+                  {Number(
+                    experiment.test_pf
+                  ).toFixed(2)}
+                </span>
+              )}
+
+              {experiment?.test_expectancy_R != null && (
+                <span>
+                  Test Exp:{" "}
+                  {Number(
+                    experiment.test_expectancy_R
+                  ).toFixed(3)} R
+                </span>
+              )}
+
+            </div>
+
+          </div>
+
+        )
+      )}
+
+    </div>
+  );
+}
+
+
+/* ============================================================
+   STYLES
    ============================================================ */
 
 const styles = {
@@ -378,11 +856,9 @@ const styles = {
     minHeight: "100vh",
     background: "#080b12",
     color: "#ffffff",
-
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
-
     fontFamily:
       "Arial, sans-serif"
   },
@@ -391,6 +867,118 @@ const styles = {
   container: {
     maxWidth: "1100px",
     margin: "0 auto"
+  },
+
+
+  researchPanel: {
+    background: "#101520",
+    border: "1px solid #1e2738",
+    borderRadius: "18px",
+    padding: "26px",
+    marginTop: "28px"
+  },
+
+
+  researchResults: {
+    background: "#101520",
+    border: "1px solid #1e2738",
+    borderRadius: "18px",
+    padding: "26px",
+    marginTop: "28px"
+  },
+
+
+  researchEyebrow: {
+    color: "#7f899b",
+    fontSize: "12px",
+    letterSpacing: "1.5px",
+    marginBottom: "8px"
+  },
+
+
+  researchTitle: {
+    fontSize: "28px",
+    margin: "8px 0"
+  },
+
+
+  researchDescription: {
+    color: "#8d96a8",
+    lineHeight: 1.6,
+    maxWidth: "760px"
+  },
+
+
+  researchMeta: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "6px",
+    marginTop: "20px",
+    marginBottom: "18px",
+    color: "#596477",
+    fontSize: "11px",
+    letterSpacing: "1px"
+  },
+
+
+  researchMetaStrong: {
+    color: "#8d96a8"
+  },
+
+
+  researchButton: {
+    width: "100%",
+    padding: "16px",
+    border: "none",
+    borderRadius: "10px",
+    background: "#ffffff",
+    color: "#080b12",
+    fontWeight: "700",
+    fontSize: "15px",
+    cursor: "pointer"
+  },
+
+
+  researchError: {
+    marginTop: "18px",
+    padding: "14px",
+    borderRadius: "10px",
+    background: "#251318",
+    color: "#ff9b9b",
+    lineHeight: 1.5
+  },
+
+
+  experimentGrid: {
+    display: "grid",
+    gridTemplateColumns:
+      "repeat(auto-fit, minmax(200px, 1fr))",
+    gap: "12px",
+    marginTop: "22px"
+  },
+
+
+  experimentCard: {
+    background: "#080b12",
+    border: "1px solid #1e2738",
+    borderRadius: "12px",
+    padding: "16px"
+  },
+
+
+  experimentName: {
+    fontSize: "14px",
+    fontWeight: "700",
+    marginBottom: "10px"
+  },
+
+
+  experimentStats: {
+    display: "flex",
+    flexDirection: "column",
+    gap: "5px",
+    color: "#7f899b",
+    fontSize: "12px"
   },
 
 
