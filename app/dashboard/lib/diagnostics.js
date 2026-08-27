@@ -1,21 +1,21 @@
-export function calculateDiagnostics(results) {
-  const pf = Number(results?.profit_factor);
+export function calculateDiagnostics(results = {}) {
+  const pf = Number(results.profit_factor);
 
   const expectancy = Number(
-    results?.expectancy_R
+    results.expectancy_R
   );
 
   const totalR = Number(
-    results?.total_R
+    results.total_R
   );
 
   const drawdown = Number(
-    results?.max_drawdown
+    results.max_drawdown
   );
 
   const trades = Number(
-    results?.trades ??
-      results?.test_trades ??
+    results.trades ??
+      results.test_trades ??
       0
   );
 
@@ -51,98 +51,87 @@ export function calculateDiagnostics(results) {
 }
 
 
-export function getResearchVerdict(results) {
+/* ============================================================
+   RESEARCH VERDICT
+   ============================================================ */
+
+export function getResearchVerdict(results = {}) {
   const {
-    pf,
-    expectancy,
-    totalR,
-    drawdown,
-    trades,
     checks
   } = calculateDiagnostics(results);
 
-  if (trades < 100) {
+  const positiveChecks =
+    Object.values(checks)
+      .filter(Boolean)
+      .length;
+
+  /*
+   * Not enough trades to make a
+   * meaningful statistical judgment.
+   */
+
+  if (!checks.sample) {
     return {
       verdict: "INSUFFICIENT SAMPLE",
-
       message:
-        "The current test does not contain enough trades to make a reliable statistical judgment.",
-
-      checks
+        "The current test does not contain enough trades to make a reliable statistical judgment."
     };
   }
+
+  /*
+   * A strategy cannot demonstrate
+   * an edge without positive
+   * profitability, expectancy
+   * and equity growth.
+   */
+
+  if (
+    !checks.profitability ||
+    !checks.expectancy ||
+    !checks.equity
+  ) {
+    return {
+      verdict: "NO EDGE",
+      message:
+        "The tested strategy does not currently demonstrate a positive statistical edge."
+    };
+  }
+
+  /*
+   * Strong research result.
+   */
 
   if (
     checks.profitability &&
     checks.expectancy &&
     checks.equity &&
     checks.sample &&
-    checks.drawdown
+    checks.drawdown &&
+    positiveChecks >= 4
   ) {
     return {
       verdict: "POSITIVE EDGE",
-
       message:
-        "The current test demonstrates positive profitability, expectancy and equity growth within the research risk limits.",
-
-      checks
+        "The current test demonstrates positive profitability, expectancy and equity growth within the research risk limits."
     };
   }
 
-  if (
-    checks.profitability &&
-    checks.expectancy &&
-    checks.equity
-  ) {
+  /*
+   * Positive characteristics,
+   * but requires additional validation.
+   */
+
+  if (positiveChecks >= 3) {
     return {
       verdict: "PROMISING",
-
       message:
-        "The strategy shows positive characteristics but requires additional validation before being considered reliable.",
-
-      checks
+        "The strategy shows positive characteristics but requires additional validation before being considered reliable."
     };
   }
 
   return {
-    verdict: "NO EDGE",
-
+    verdict: "INCONCLUSIVE",
     message:
-      "The tested strategy does not currently demonstrate a positive statistical edge.",
-
-    checks
+      "ATLAS needs more evidence before judging the strategy."
   };
-}
-
-
-export function formatPercent(value) {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) {
-    return "—";
-  }
-
-  return `${(number * 100).toFixed(2)}%`;
-}
-
-
-export function formatR(value) {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) {
-    return "—";
-  }
-
-  return `${number.toFixed(3)} R`;
-}
-
-
-export function formatNumber(value, decimals = 2) {
-  const number = Number(value);
-
-  if (!Number.isFinite(number)) {
-    return "—";
-  }
-
-  return number.toFixed(decimals);
 }
