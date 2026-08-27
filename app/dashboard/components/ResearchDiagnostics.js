@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 import {
   calculateDiagnostics,
   getResearchVerdict
@@ -8,6 +10,8 @@ import {
 export default function ResearchDiagnostics({
   results
 }) {
+  const [expanded, setExpanded] = useState(false);
+
   if (!results) {
     return null;
   }
@@ -42,20 +46,26 @@ export default function ResearchDiagnostics({
 
   return (
     <section style={styles.panel}>
+
       <div style={styles.eyebrow}>
         RESEARCH DIAGNOSTICS
       </div>
 
-      <h2 style={styles.panelTitle}>
-        Statistical Edge Assessment
-      </h2>
+      <div style={styles.headerRow}>
 
-      <p style={styles.description}>
-        ATLAS evaluates profitability,
-        expectancy, equity growth, sample
-        size and drawdown before assigning
-        a research verdict.
-      </p>
+        <div>
+          <h2 style={styles.panelTitle}>
+            Statistical Edge Assessment
+          </h2>
+
+          <p style={styles.description}>
+            ATLAS evaluates profitability,
+            expectancy, equity growth, sample
+            size and drawdown.
+          </p>
+        </div>
+
+      </div>
 
       {/* VERDICT */}
 
@@ -65,6 +75,7 @@ export default function ResearchDiagnostics({
           borderColor: verdictBorder
         }}
       >
+
         <div style={styles.verdictLabel}>
           CURRENT VERDICT
         </div>
@@ -81,80 +92,109 @@ export default function ResearchDiagnostics({
         <div style={styles.verdictMessage}>
           {verdictMessage}
         </div>
-      </div>
-
-      {/* DIAGNOSTIC CHECKS */}
-
-      <div style={styles.diagnosticGrid}>
-
-        <Diagnostic
-          label="Profit Factor"
-          passed={checks.profitability}
-          detail={
-            Number.isFinite(pf)
-              ? `${pf.toFixed(2)} · target > 1.00`
-              : "Unavailable"
-          }
-        />
-
-        <Diagnostic
-          label="Expectancy"
-          passed={checks.expectancy}
-          detail={
-            Number.isFinite(expectancy)
-              ? `${expectancy.toFixed(3)} R · target > 0`
-              : "Unavailable"
-          }
-        />
-
-        <Diagnostic
-          label="Net Result"
-          passed={checks.equity}
-          detail={
-            Number.isFinite(totalR)
-              ? `${totalR.toFixed(2)} R · target > 0`
-              : "Unavailable"
-          }
-        />
-
-        <Diagnostic
-          label="Sample Size"
-          passed={checks.sample}
-          detail={
-            `${trades.toLocaleString()} trades · minimum 100`
-          }
-        />
-
-        <Diagnostic
-          label="Drawdown"
-          passed={checks.drawdown}
-          detail={
-            Number.isFinite(drawdown)
-              ? `${(
-                  drawdown * 100
-                ).toFixed(2)}% · research limit < 25%`
-              : "Unavailable"
-          }
-        />
 
       </div>
 
-      {/* INTERPRETATION */}
+      {/* DETAILS TOGGLE */}
 
-      <div style={styles.researchNote}>
-        <strong>
-          ATLAS interpretation
-        </strong>
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        style={styles.toggleButton}
+      >
+        <span>
+          {expanded
+            ? "HIDE RESEARCH DETAILS"
+            : "VIEW RESEARCH DETAILS"}
+        </span>
 
-        <p style={styles.researchNoteText}>
-          A large number of candles does not
-          automatically mean a strategy has
-          an edge. ATLAS looks for positive
-          expectancy and profitability while
-          also considering sample size and
-          drawdown.
-        </p>
-      </div>
+        <span style={styles.toggleIcon}>
+          {expanded ? "−" : "+"}
+        </span>
+      </button>
+
+      {/* EXPANDED DETAILS */}
+
+      {expanded && (
+        <div style={styles.details}>
+
+          {/* DIAGNOSTIC CHECKS */}
+
+          <div style={styles.diagnosticGrid}>
+
+            <Diagnostic
+              label="Profit Factor"
+              passed={checks.profitability}
+              detail={
+                Number.isFinite(pf)
+                  ? `${pf.toFixed(2)} · target > 1.00`
+                  : "Unavailable"
+              }
+            />
+
+            <Diagnostic
+              label="Expectancy"
+              passed={checks.expectancy}
+              detail={
+                Number.isFinite(expectancy)
+                  ? `${expectancy.toFixed(3)} R · target > 0`
+                  : "Unavailable"
+              }
+            />
+
+            <Diagnostic
+              label="Net Result"
+              passed={checks.equity}
+              detail={
+                Number.isFinite(totalR)
+                  ? `${totalR.toFixed(2)} R · target > 0`
+                  : "Unavailable"
+              }
+            />
+
+            <Diagnostic
+              label="Sample Size"
+              passed={checks.sample}
+              detail={
+                `${trades.toLocaleString()} trades · minimum 100`
+              }
+            />
+
+            <Diagnostic
+              label="Drawdown"
+              passed={checks.drawdown}
+              detail={
+                Number.isFinite(drawdown)
+                  ? `${(
+                      drawdown * 100
+                    ).toFixed(2)}% · research limit < 25%`
+                  : "Unavailable"
+              }
+            />
+
+          </div>
+
+          {/* INTERPRETATION */}
+
+          <div style={styles.researchNote}>
+
+            <strong>
+              ATLAS interpretation
+            </strong>
+
+            <p style={styles.researchNoteText}>
+              A large number of candles does not
+              automatically mean a strategy has
+              an edge. ATLAS looks for positive
+              expectancy and profitability while
+              also considering sample size and
+              drawdown.
+            </p>
+
+          </div>
+
+        </div>
+      )}
 
     </section>
   );
@@ -224,6 +264,12 @@ const styles = {
     marginBottom: "8px"
   },
 
+  headerRow: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start"
+  },
+
   panelTitle: {
     fontSize: "28px",
     margin: "8px 0"
@@ -232,7 +278,8 @@ const styles = {
   description: {
     color: "#8d96a8",
     lineHeight: 1.6,
-    maxWidth: "700px"
+    maxWidth: "700px",
+    marginBottom: "0"
   },
 
   verdict: {
@@ -259,6 +306,33 @@ const styles = {
     color: "#8d96a8",
     marginTop: "8px",
     lineHeight: 1.5
+  },
+
+  toggleButton: {
+    width: "100%",
+    marginTop: "16px",
+    padding: "14px 16px",
+    background: "#0b1019",
+    color: "#aeb7c7",
+    border: "1px solid #1e2738",
+    borderRadius: "10px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    fontSize: "12px",
+    fontWeight: "700",
+    letterSpacing: "1px",
+    cursor: "pointer"
+  },
+
+  toggleIcon: {
+    fontSize: "20px",
+    fontWeight: "400",
+    lineHeight: 1
+  },
+
+  details: {
+    marginTop: "4px"
   },
 
   diagnosticGrid: {
