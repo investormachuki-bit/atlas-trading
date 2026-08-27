@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  TIMEFRAME,
+  RISK_PER_TRADE,
+  RISK_REWARD
+} from "../lib/constants";
+
 export default function BacktestLab({
   running,
   progress,
@@ -28,17 +34,17 @@ export default function BacktestLab({
 
         <Parameter
           label="Risk / Trade"
-          value="1%"
+          value={`${RISK_PER_TRADE * 100}%`}
         />
 
         <Parameter
           label="Risk / Reward"
-          value="1 : 2"
+          value={`1 : ${RISK_REWARD}`}
         />
 
         <Parameter
           label="Timeframe"
-          value="M5"
+          value={TIMEFRAME}
         />
 
       </div>
@@ -104,6 +110,11 @@ function Progress({
   progress,
   text
 }) {
+  const safeProgress = Math.min(
+    100,
+    Math.max(0, Number(progress) || 0)
+  );
+
   return (
     <div style={styles.progressBox}>
 
@@ -114,7 +125,7 @@ function Progress({
         </span>
 
         <strong>
-          {Number(progress).toFixed(1)}%
+          {safeProgress.toFixed(1)}%
         </strong>
 
       </div>
@@ -123,10 +134,7 @@ function Progress({
         <div
           style={{
             ...styles.progressBar,
-            width: `${Math.min(
-              100,
-              Math.max(0, Number(progress) || 0)
-            )}%`
+            width: `${safeProgress}%`
           }}
         />
       </div>
