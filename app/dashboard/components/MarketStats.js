@@ -1,7 +1,9 @@
 "use client";
 
+import { TOTAL_CANDLES } from "../lib/constants";
+
 export default function MarketStats({
-  candles = 329103,
+  candles = TOTAL_CANDLES,
   market = "XAUUSD",
   timeframe = "M5",
   engine = "READY"
@@ -53,6 +55,10 @@ function StatCard({
   );
 }
 
+
+/* ============================================================
+   STYLES
+   ============================================================ */
 
 const styles = {
   grid: {
