@@ -1,6 +1,9 @@
 "use client";
 
-import { getResearchVerdict } from "../lib/diagnostics";
+import {
+  calculateDiagnostics,
+  getResearchVerdict
+} from "../lib/diagnostics";
 
 export default function ResearchDiagnostics({
   results
@@ -16,33 +19,26 @@ export default function ResearchDiagnostics({
     drawdown,
     trades,
     checks
+  } = calculateDiagnostics(results);
+
+  const {
+    verdict,
+    message: verdictMessage
   } = getResearchVerdict(results);
 
-  const { verdict } =
-    getResearchVerdict(results);
+  const verdictBorder =
+    verdict === "POSITIVE EDGE"
+      ? "#315f42"
+      : verdict === "NO EDGE"
+      ? "#6b3038"
+      : "#394052";
 
-  let verdictMessage =
-    "ATLAS needs more evidence before judging the strategy.";
-
-  if (verdict === "POSITIVE EDGE") {
-    verdictMessage =
-      "The current test demonstrates positive profitability, expectancy and equity growth within the research risk limits.";
-  }
-
-  if (verdict === "PROMISING") {
-    verdictMessage =
-      "The strategy shows positive characteristics but requires additional validation before being considered reliable.";
-  }
-
-  if (verdict === "NO EDGE") {
-    verdictMessage =
-      "The tested strategy does not currently demonstrate a positive statistical edge.";
-  }
-
-  if (verdict === "INSUFFICIENT SAMPLE") {
-    verdictMessage =
-      "The current test does not contain enough trades to make a reliable statistical judgment.";
-  }
+  const verdictColor =
+    verdict === "POSITIVE EDGE"
+      ? "#a8e6bb"
+      : verdict === "NO EDGE"
+      ? "#ff9b9b"
+      : "#d3d9e5";
 
   return (
     <section style={styles.panel}>
@@ -61,15 +57,12 @@ export default function ResearchDiagnostics({
         a research verdict.
       </p>
 
+      {/* VERDICT */}
+
       <div
         style={{
           ...styles.verdict,
-          borderColor:
-            verdict === "POSITIVE EDGE"
-              ? "#315f42"
-              : verdict === "NO EDGE"
-              ? "#6b3038"
-              : "#394052"
+          borderColor: verdictBorder
         }}
       >
         <div style={styles.verdictLabel}>
@@ -79,12 +72,7 @@ export default function ResearchDiagnostics({
         <div
           style={{
             ...styles.verdictTitle,
-            color:
-              verdict === "POSITIVE EDGE"
-                ? "#a8e6bb"
-                : verdict === "NO EDGE"
-                ? "#ff9b9b"
-                : "#d3d9e5"
+            color: verdictColor
           }}
         >
           {verdict}
@@ -95,7 +83,10 @@ export default function ResearchDiagnostics({
         </div>
       </div>
 
+      {/* DIAGNOSTIC CHECKS */}
+
       <div style={styles.diagnosticGrid}>
+
         <Diagnostic
           label="Profit Factor"
           passed={checks.profitability}
@@ -145,7 +136,10 @@ export default function ResearchDiagnostics({
               : "Unavailable"
           }
         />
+
       </div>
+
+      {/* INTERPRETATION */}
 
       <div style={styles.researchNote}>
         <strong>
@@ -161,13 +155,14 @@ export default function ResearchDiagnostics({
           drawdown.
         </p>
       </div>
+
     </section>
   );
 }
 
 
 /* ============================================================
-   DIAGNOSTIC
+   DIAGNOSTIC CARD
    ============================================================ */
 
 function Diagnostic({
@@ -177,7 +172,9 @@ function Diagnostic({
 }) {
   return (
     <div style={styles.diagnosticCard}>
+
       <div style={styles.diagnosticTop}>
+
         <span style={styles.cardLabel}>
           {label}
         </span>
@@ -190,13 +187,17 @@ function Diagnostic({
               : "#ff9b9b"
           }}
         >
-          {passed ? "PASS" : "FAIL"}
+          {passed
+            ? "PASS"
+            : "FAIL"}
         </span>
+
       </div>
 
       <div style={styles.diagnosticDetail}>
         {detail}
       </div>
+
     </div>
   );
 }
@@ -207,6 +208,7 @@ function Diagnostic({
    ============================================================ */
 
 const styles = {
+
   panel: {
     background: "#101520",
     border: "1px solid #1e2738",
@@ -311,4 +313,5 @@ const styles = {
   researchNoteText: {
     margin: "8px 0 0"
   }
+
 };
