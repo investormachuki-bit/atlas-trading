@@ -18,6 +18,7 @@ export default function ResearchDiagnostics({
   const [expanded, setExpanded] =
     useState(false);
 
+
   const diagnosticsResult =
     useMemo(() => {
       if (!results) {
@@ -111,7 +112,7 @@ export default function ResearchDiagnostics({
 
 
       {/* ======================================================
-         CURRENT HISTORICAL VERDICT
+         HISTORICAL VERDICT
          ====================================================== */}
 
       <div
@@ -144,7 +145,7 @@ export default function ResearchDiagnostics({
 
 
       {/* ======================================================
-         RESEARCH ENGINE STATUS
+         RESEARCH ENGINE
          ====================================================== */}
 
       <ResearchEnginePanel
@@ -153,7 +154,7 @@ export default function ResearchDiagnostics({
 
 
       {/* ======================================================
-         ROBUSTNESS GATE
+         HISTORICAL RESEARCH GATE
          ====================================================== */}
 
       <div
@@ -191,7 +192,6 @@ export default function ResearchDiagnostics({
                 robustness.color
             }}
           >
-
             {robustness.score}
 
             <span
@@ -201,7 +201,6 @@ export default function ResearchDiagnostics({
             >
               /100
             </span>
-
           </div>
 
         </div>
@@ -355,7 +354,7 @@ export default function ResearchDiagnostics({
 
 
           {/* --------------------------------------------------
-             MONTHLY / HISTORICAL CONSISTENCY
+             HISTORICAL CONSISTENCY
              -------------------------------------------------- */}
 
           <div style={styles.subsectionTitle}>
@@ -428,7 +427,7 @@ export default function ResearchDiagnostics({
 
 
           {/* --------------------------------------------------
-             ROBUSTNESS ASSESSMENT
+             ROBUSTNESS
              -------------------------------------------------- */}
 
           <div style={styles.subsectionTitle}>
@@ -492,7 +491,7 @@ export default function ResearchDiagnostics({
 
 
           {/* --------------------------------------------------
-             RESEARCH INTERPRETATION
+             RESEARCH RULE
              -------------------------------------------------- */}
 
           <div style={styles.researchNote}>
@@ -640,7 +639,7 @@ function ResearchEnginePanel({
             value={
               research.walkForwardAvailable
                 ? "AVAILABLE"
-                : "N/A"
+                : "LOCKED"
             }
           />
 
@@ -719,7 +718,7 @@ function ResearchDetails({
           value={
             research.walkForwardAvailable
               ? "AVAILABLE"
-              : "N/A"
+              : "LOCKED"
           }
         />
 
@@ -745,6 +744,7 @@ function ResearchDetails({
                 >
 
                   <div>
+
                     <div
                       style={
                         styles.experimentName
@@ -762,6 +762,7 @@ function ResearchDetails({
                         {experiment.detail}
                       </div>
                     )}
+
                   </div>
 
                   <div
@@ -830,6 +831,14 @@ function ValidationPipeline({
   const oosReady =
     research.oosAvailable;
 
+  /*
+   * IMPORTANT:
+   *
+   * Walk-forward is NOT considered complete merely
+   * because a walk_forward object/property exists.
+   *
+   * It requires concrete completed fold evidence.
+   */
   const walkForwardReady =
     research.walkForwardAvailable;
 
@@ -891,7 +900,7 @@ function ValidationPipeline({
           title="Out-of-Sample Testing"
           status={
             oosReady
-              ? "COMPLETE"
+              ? "AVAILABLE"
               : "LOCKED"
           }
           active={
@@ -904,7 +913,7 @@ function ValidationPipeline({
           title="Walk-Forward Validation"
           status={
             walkForwardReady
-              ? "COMPLETE"
+              ? "AVAILABLE"
               : "LOCKED"
           }
           active={
@@ -945,7 +954,8 @@ function buildResearchAssessment(
   results
 ) {
   const research =
-    results?.research || null;
+    results?.research ||
+    null;
 
   const explicitStatus =
     results?.research_status ||
@@ -964,19 +974,38 @@ function buildResearchAssessment(
     ) {
       return {
         status: "FAILED",
-        label: "RESEARCH ENGINE FAILED",
-        color: "#ff9b9b",
-        border: "#6b3038",
+
+        label:
+          "RESEARCH ENGINE FAILED",
+
+        color:
+          "#ff9b9b",
+
+        border:
+          "#6b3038",
+
         message:
           researchError ||
           "The historical backtest completed, but the Research Engine did not complete.",
-        hasResearch: false,
-        isAvailable: false,
-        oosAvailable: false,
-        walkForwardAvailable: false,
-        experiments: [],
+
+        hasResearch:
+          false,
+
+        isAvailable:
+          false,
+
+        oosAvailable:
+          false,
+
+        walkForwardAvailable:
+          false,
+
+        experiments:
+          [],
+
         nextAction:
           "Review Research Engine failure",
+
         nextActionMessage:
           "The historical backtest remains preserved. Resolve the Research Engine failure before treating the strategy as research validated."
       };
@@ -1000,15 +1029,20 @@ function buildResearchAssessment(
       message:
         "The historical backtest is available, but no completed Research Engine result is attached yet.",
 
-      hasResearch: false,
+      hasResearch:
+        false,
 
-      isAvailable: false,
+      isAvailable:
+        false,
 
-      oosAvailable: false,
+      oosAvailable:
+        false,
 
-      walkForwardAvailable: false,
+      walkForwardAvailable:
+        false,
 
-      experiments: [],
+      experiments:
+        [],
 
       nextAction:
         "Run Research Engine",
@@ -1054,7 +1088,7 @@ function buildResearchAssessment(
 
 
   const oosAvailable =
-    hasAny(
+    hasCompletedValidationEvidence(
       research,
       [
         "out_of_sample",
@@ -1065,14 +1099,23 @@ function buildResearchAssessment(
     );
 
 
+  /*
+   * DO NOT use hasAny() here.
+   *
+   * A property such as:
+   *
+   * walk_forward: {}
+   *
+   * does not mean walk-forward validation has
+   * actually happened.
+   *
+   * The current Supabase database has zero
+   * walk_forward_folds, therefore this must
+   * evaluate to false.
+   */
   const walkForwardAvailable =
-    hasAny(
-      research,
-      [
-        "walk_forward",
-        "walkForward",
-        "walk_forward_results"
-      ]
+    hasCompletedWalkForwardEvidence(
+      research
     );
 
 
@@ -1142,6 +1185,310 @@ function buildResearchAssessment(
 
 
 /* ============================================================
+   COMPLETED VALIDATION EVIDENCE
+   ============================================================ */
+
+function hasCompletedValidationEvidence(
+  research,
+  keys
+) {
+  if (!research) {
+    return false;
+  }
+
+
+  for (
+    const key of keys
+  ) {
+    const value =
+      research[key];
+
+    if (
+      value == null
+    ) {
+      continue;
+    }
+
+
+    /*
+     * Arrays require at least one
+     * concrete validation result.
+     */
+    if (
+      Array.isArray(value)
+    ) {
+      if (
+        value.length > 0
+      ) {
+        return true;
+      }
+
+      continue;
+    }
+
+
+    /*
+     * Numeric counts are accepted
+     * only when greater than zero.
+     */
+    if (
+      typeof value ===
+      "number"
+    ) {
+      if (
+        Number.isFinite(value) &&
+        value > 0
+      ) {
+        return true;
+      }
+
+      continue;
+    }
+
+
+    /*
+     * Objects need actual evidence.
+     */
+    if (
+      typeof value ===
+      "object"
+    ) {
+
+      const count =
+        firstNumber(
+          value,
+          [
+            "completed_folds",
+            "completed",
+            "fold_count",
+            "folds_count",
+            "count",
+            "total"
+          ]
+        );
+
+      if (
+        count != null &&
+        count > 0
+      ) {
+        return true;
+      }
+
+
+      const folds =
+        value.folds ||
+        value.results ||
+        value.fold_results;
+
+
+      if (
+        Array.isArray(folds) &&
+        folds.length > 0
+      ) {
+        return true;
+      }
+
+
+      if (
+        folds &&
+        typeof folds ===
+          "object" &&
+        Object.keys(folds).length > 0
+      ) {
+        return true;
+      }
+
+
+      if (
+        value.completed ===
+          true
+      ) {
+        return true;
+      }
+
+
+      if (
+        String(
+          value.status ||
+          ""
+        ).toLowerCase() ===
+          "completed"
+      ) {
+        return true;
+      }
+    }
+  }
+
+
+  return false;
+}
+
+
+/* ============================================================
+   WALK-FORWARD EVIDENCE
+   ============================================================ */
+
+function hasCompletedWalkForwardEvidence(
+  research
+) {
+  if (!research) {
+    return false;
+  }
+
+
+  const candidates = [
+    research.walk_forward,
+    research.walkForward,
+    research.walk_forward_results,
+    research.walkForwardResults,
+    research.walk_forward_validation,
+    research.walkForwardValidation
+  ];
+
+
+  for (
+    const value of candidates
+  ) {
+
+    if (
+      value == null
+    ) {
+      continue;
+    }
+
+
+    /*
+     * A list of folds is direct evidence.
+     */
+    if (
+      Array.isArray(value)
+    ) {
+      if (
+        value.length > 0
+      ) {
+        return true;
+      }
+
+      continue;
+    }
+
+
+    /*
+     * Numeric fold count.
+     */
+    if (
+      typeof value ===
+      "number"
+    ) {
+      if (
+        Number.isFinite(value) &&
+        value > 0
+      ) {
+        return true;
+      }
+
+      continue;
+    }
+
+
+    if (
+      typeof value !==
+      "object"
+    ) {
+      continue;
+    }
+
+
+    /*
+     * Explicit fold counts.
+     */
+    const foldCount =
+      firstNumber(
+        value,
+        [
+          "completed_folds",
+          "completedFoldCount",
+          "fold_count",
+          "foldCount",
+          "folds_count",
+          "total_folds",
+          "totalFolds"
+        ]
+      );
+
+
+    if (
+      foldCount != null &&
+      foldCount > 0
+    ) {
+      return true;
+    }
+
+
+    /*
+     * Actual fold arrays/results.
+     */
+    const folds =
+      value.folds ||
+      value.fold_results ||
+      value.foldResults ||
+      value.results;
+
+
+    if (
+      Array.isArray(folds) &&
+      folds.length > 0
+    ) {
+      return true;
+    }
+
+
+    if (
+      folds &&
+      typeof folds ===
+        "object" &&
+      Object.keys(folds).length > 0
+    ) {
+      return true;
+    }
+
+
+    /*
+     * Explicit completion flag.
+     */
+    if (
+      value.completed ===
+        true
+    ) {
+      return true;
+    }
+
+
+    /*
+     * Explicit completed status.
+     */
+    if (
+      String(
+        value.status ||
+        ""
+      ).toLowerCase() ===
+        "completed"
+    ) {
+      return true;
+    }
+  }
+
+
+  /*
+   * No concrete fold evidence.
+   *
+   * This is intentionally false.
+   */
+  return false;
+}
+
+
+/* ============================================================
    RESEARCH MESSAGE
    ============================================================ */
 
@@ -1155,6 +1502,7 @@ function buildResearchMessage(
     );
   }
 
+
   if (
     verdict ===
     "POSITIVE_EDGE_REQUIRES_VALIDATION"
@@ -1163,6 +1511,7 @@ function buildResearchMessage(
       "The Research Engine found positive evidence, but the strategy still requires additional validation before advancement."
     );
   }
+
 
   if (
     verdict ===
@@ -1173,6 +1522,7 @@ function buildResearchMessage(
     );
   }
 
+
   if (
     verdict ===
     "INSUFFICIENT_SAMPLE"
@@ -1181,6 +1531,7 @@ function buildResearchMessage(
       "The Research Engine considers the available evidence insufficient for a reliable conclusion."
     );
   }
+
 
   return (
     "The Research Engine completed. Review its detailed evidence before progression."
@@ -1199,17 +1550,20 @@ function isValidatedVerdict(
     return false;
   }
 
+
   const normalized =
     String(verdict)
       .toUpperCase();
 
-  return (
-    normalized.includes(
-      "VALIDATED"
-    ) ||
-    normalized.includes(
-      "WALK_FORWARD"
-    )
+
+  /*
+   * A generic WALK_FORWARD string should NOT
+   * automatically validate the strategy.
+   *
+   * The actual fold evidence is checked separately.
+   */
+  return normalized.includes(
+    "VALIDATED"
   );
 }
 
@@ -1232,7 +1586,10 @@ function extractExperiments(
     Array.isArray(source)
   ) {
     return source.map(
-      (experiment, index) => ({
+      (
+        experiment,
+        index
+      ) => ({
         id:
           String(
             experiment?.id ||
@@ -1272,8 +1629,14 @@ function extractExperiments(
     return Object.entries(
       source
     ).map(
-      ([key, experiment]) => ({
-        id: key,
+      (
+        [
+          key,
+          experiment
+        ]
+      ) => ({
+        id:
+          key,
 
         name:
           experiment?.name ||
@@ -1313,6 +1676,7 @@ function buildExperimentDetail(
     return "";
   }
 
+
   const parts = [];
 
 
@@ -1350,28 +1714,36 @@ function buildExperimentDetail(
     );
 
 
-  if (pf != null) {
+  if (
+    pf != null
+  ) {
     parts.push(
       `PF ${pf.toFixed(2)}`
     );
   }
 
 
-  if (expectancy != null) {
+  if (
+    expectancy != null
+  ) {
     parts.push(
       `Expectancy ${expectancy.toFixed(3)} R`
     );
   }
 
 
-  if (totalR != null) {
+  if (
+    totalR != null
+  ) {
     parts.push(
       `Net ${totalR.toFixed(2)} R`
     );
   }
 
 
-  return parts.join(" · ");
+  return parts.join(
+    " · "
+  );
 }
 
 
@@ -1401,21 +1773,17 @@ function buildRobustnessAssessment(
     diagnostics.years ||
     {};
 
-
   const months =
     diagnostics.months ||
     {};
-
 
   const directions =
     diagnostics.directions ||
     {};
 
-
   const sessions =
     diagnostics.sessions ||
     {};
-
 
   const volatility =
     diagnostics.volatility ||
@@ -1437,7 +1805,9 @@ function buildRobustnessAssessment(
         : null;
 
 
-  /* SAMPLE */
+  /* ----------------------------------------------------------
+     SAMPLE
+     ---------------------------------------------------------- */
 
   const samplePass =
     sampleTrades >= 100;
@@ -1446,7 +1816,9 @@ function buildRobustnessAssessment(
     sampleTrades >= 300;
 
 
-  /* PROFIT FACTOR */
+  /* ----------------------------------------------------------
+     PROFIT FACTOR
+     ---------------------------------------------------------- */
 
   const pfPass =
     Number.isFinite(pf) &&
@@ -1457,7 +1829,9 @@ function buildRobustnessAssessment(
     pf >= 1.30;
 
 
-  /* EXPECTANCY */
+  /* ----------------------------------------------------------
+     EXPECTANCY
+     ---------------------------------------------------------- */
 
   const expectancyPass =
     Number.isFinite(
@@ -1472,14 +1846,18 @@ function buildRobustnessAssessment(
     expectancy >= 0.10;
 
 
-  /* NET RESULT */
+  /* ----------------------------------------------------------
+     NET RESULT
+     ---------------------------------------------------------- */
 
   const totalRPass =
     Number.isFinite(totalR) &&
     totalR > 0;
 
 
-  /* DRAWDOWN */
+  /* ----------------------------------------------------------
+     DRAWDOWN
+     ---------------------------------------------------------- */
 
   const ddPass =
     Number.isFinite(drawdown) &&
@@ -1490,7 +1868,9 @@ function buildRobustnessAssessment(
     drawdown < 0.15;
 
 
-  /* YEAR CONSISTENCY */
+  /* ----------------------------------------------------------
+     YEAR CONSISTENCY
+     ---------------------------------------------------------- */
 
   const yearEntries =
     Object.values(
@@ -1535,7 +1915,9 @@ function buildRobustnessAssessment(
     );
 
 
-  /* MONTH CONSISTENCY */
+  /* ----------------------------------------------------------
+     MONTH CONSISTENCY
+     ---------------------------------------------------------- */
 
   const monthEntries =
     Object.values(
@@ -1580,7 +1962,9 @@ function buildRobustnessAssessment(
     );
 
 
-  /* DIRECTION */
+  /* ----------------------------------------------------------
+     DIRECTION
+     ---------------------------------------------------------- */
 
   const directionEntries =
     Object.values(
@@ -1614,7 +1998,9 @@ function buildRobustnessAssessment(
     );
 
 
-  /* SESSION */
+  /* ----------------------------------------------------------
+     SESSION
+     ---------------------------------------------------------- */
 
   const sessionEntries =
     Object.values(
@@ -1648,7 +2034,9 @@ function buildRobustnessAssessment(
     );
 
 
-  /* VOLATILITY */
+  /* ----------------------------------------------------------
+     VOLATILITY
+     ---------------------------------------------------------- */
 
   const volatilityEntries =
     Object.values(
@@ -1682,7 +2070,9 @@ function buildRobustnessAssessment(
     );
 
 
-  /* TRADE QUALITY */
+  /* ----------------------------------------------------------
+     TRADE QUALITY
+     ---------------------------------------------------------- */
 
   const averageMFE =
     finiteNumber(
@@ -1724,40 +2114,60 @@ function buildRobustnessAssessment(
     maxConsecutiveLosses <= 8;
 
 
-  /* SCORE */
+  /* ----------------------------------------------------------
+     SCORE
+     ---------------------------------------------------------- */
 
   let score = 0;
 
 
-  if (sampleStrong) {
+  if (
+    sampleStrong
+  ) {
     score += 15;
-  } else if (samplePass) {
+  } else if (
+    samplePass
+  ) {
     score += 7.5;
   }
 
 
-  if (pfStrong) {
+  if (
+    pfStrong
+  ) {
     score += 15;
-  } else if (pfPass) {
+  } else if (
+    pfPass
+  ) {
     score += 7.5;
   }
 
 
-  if (expectancyStrong) {
+  if (
+    expectancyStrong
+  ) {
     score += 15;
-  } else if (expectancyPass) {
+  } else if (
+    expectancyPass
+  ) {
     score += 7.5;
   }
 
 
-  if (totalRPass) {
+  if (
+    totalRPass
+  ) {
     score += 10;
   }
 
 
-  if (ddStrong) {
+  if (
+    ddStrong
+  ) {
     score += 10;
-  } else if (ddPass) {
+  } else if (
+    ddPass
+  ) {
     score += 7.5;
   }
 
@@ -1839,14 +2249,17 @@ function buildRobustnessAssessment(
     );
 
 
-  /* CHECKS */
+  /* ----------------------------------------------------------
+     CHECKS
+     ---------------------------------------------------------- */
 
   const checks = [
 
     {
       id: "sample",
       label: "Sample Size",
-      passed: samplePass,
+      passed:
+        samplePass,
       status:
         samplePass
           ? "PASS"
@@ -1858,7 +2271,8 @@ function buildRobustnessAssessment(
     {
       id: "profit-factor",
       label: "Profitability Quality",
-      passed: pfPass,
+      passed:
+        pfPass,
       status:
         pfPass
           ? "PASS"
@@ -1872,13 +2286,16 @@ function buildRobustnessAssessment(
     {
       id: "expectancy",
       label: "Positive Expectancy",
-      passed: expectancyPass,
+      passed:
+        expectancyPass,
       status:
         expectancyPass
           ? "PASS"
           : "FAIL",
       detail:
-        Number.isFinite(expectancy)
+        Number.isFinite(
+          expectancy
+        )
           ? `${expectancy.toFixed(3)} R`
           : "Unavailable"
     },
@@ -1886,13 +2303,16 @@ function buildRobustnessAssessment(
     {
       id: "net-result",
       label: "Positive Net Result",
-      passed: totalRPass,
+      passed:
+        totalRPass,
       status:
         totalRPass
           ? "PASS"
           : "FAIL",
       detail:
-        Number.isFinite(totalR)
+        Number.isFinite(
+          totalR
+        )
           ? `${totalR.toFixed(2)} R`
           : "Unavailable"
     },
@@ -1900,13 +2320,16 @@ function buildRobustnessAssessment(
     {
       id: "drawdown",
       label: "Drawdown Control",
-      passed: ddPass,
+      passed:
+        ddPass,
       status:
         ddPass
           ? "PASS"
           : "FAIL",
       detail:
-        Number.isFinite(drawdown)
+        Number.isFinite(
+          drawdown
+        )
           ? `${(
               drawdown * 100
             ).toFixed(2)}%`
@@ -2043,7 +2466,9 @@ function buildRobustnessAssessment(
   ];
 
 
-  /* GATE */
+  /* ----------------------------------------------------------
+     RESEARCH GATE
+     ---------------------------------------------------------- */
 
   const coreEstablished =
     samplePass &&
@@ -2083,7 +2508,9 @@ function buildRobustnessAssessment(
   let nextActionMessage;
 
 
-  if (!coreEstablished) {
+  if (
+    !coreEstablished
+  ) {
 
     label =
       "EDGE NOT ESTABLISHED";
@@ -2237,7 +2664,10 @@ function HistoricalDiagnostic({
 }) {
   let detail;
 
-  if (value == null) {
+
+  if (
+    value == null
+  ) {
     detail =
       emptyText;
   } else {
@@ -2246,6 +2676,7 @@ function HistoricalDiagnostic({
         value * 100
       ).toFixed(1)}% ${suffix}`;
   }
+
 
   return (
     <Diagnostic
@@ -2273,9 +2704,12 @@ function getStabilityStatus(
   ratio,
   thresholds
 ) {
-  if (ratio == null) {
+  if (
+    ratio == null
+  ) {
     return "N/A";
   }
+
 
   if (
     ratio >=
@@ -2284,12 +2718,14 @@ function getStabilityStatus(
     return "PASS";
   }
 
+
   if (
     ratio >=
     thresholds.weak
   ) {
     return "WEAK";
   }
+
 
   return "FAIL";
 }
@@ -2307,6 +2743,7 @@ function firstValue(
     return null;
   }
 
+
   for (
     const key of keys
   ) {
@@ -2316,6 +2753,7 @@ function firstValue(
       return object[key];
     }
   }
+
 
   return null;
 }
@@ -2331,14 +2769,17 @@ function firstNumber(
       keys
     );
 
+
   if (
     value == null
   ) {
     return null;
   }
 
+
   const number =
     Number(value);
+
 
   return Number.isFinite(
     number
@@ -2355,6 +2796,7 @@ function hasAny(
   if (!object) {
     return false;
   }
+
 
   return keys.some(
     key =>
@@ -2377,10 +2819,12 @@ function getResearchEngineStyle(
     return {
       color:
         "#a8e6bb",
+
       border:
         "#315f42"
     };
   }
+
 
   if (
     status ===
@@ -2389,14 +2833,17 @@ function getResearchEngineStyle(
     return {
       color:
         "#ff9b9b",
+
       border:
         "#6b3038"
     };
   }
 
+
   return {
     color:
       "#ffcf8a",
+
     border:
       "#66502d"
   };
@@ -2417,10 +2864,12 @@ function getVerdictStyle(
     return {
       border:
         "#315f42",
+
       color:
         "#a8e6bb"
     };
   }
+
 
   if (
     verdict ===
@@ -2429,10 +2878,12 @@ function getVerdictStyle(
     return {
       border:
         "#6b3038",
+
       color:
         "#ff9b9b"
     };
   }
+
 
   if (
     verdict ===
@@ -2441,14 +2892,17 @@ function getVerdictStyle(
     return {
       border:
         "#394052",
+
       color:
         "#d3d9e5"
     };
   }
 
+
   return {
     border:
       "#394052",
+
     color:
       "#d3d9e5"
   };
@@ -2469,6 +2923,7 @@ function Stage({
     <div
       style={{
         ...styles.stage,
+
         opacity:
           status ===
           "LOCKED"
@@ -2480,6 +2935,7 @@ function Stage({
       <div
         style={{
           ...styles.stageNumber,
+
           borderColor:
             active
               ? "#697589"
@@ -2496,6 +2952,7 @@ function Stage({
       <div
         style={{
           ...styles.stageStatus,
+
           color:
             active
               ? "#d3d9e5"
@@ -2628,708 +3085,966 @@ const styles = {
   panel: {
     background:
       "#101520",
+
     border:
       "1px solid #1e2738",
+
     borderRadius:
       "18px",
+
     padding:
       "26px",
+
     marginTop:
       "28px"
   },
 
+
   eyebrow: {
     color:
       "#7f899b",
+
     fontSize:
       "12px",
+
     letterSpacing:
       "1.5px",
+
     marginBottom:
       "8px"
   },
+
 
   headerRow: {
     display:
       "flex",
+
     justifyContent:
       "space-between",
+
     alignItems:
       "flex-start"
   },
 
+
   panelTitle: {
     fontSize:
       "28px",
+
     margin:
       "8px 0"
   },
 
+
   description: {
     color:
       "#8d96a8",
+
     lineHeight:
       1.6,
+
     maxWidth:
       "720px",
+
     marginBottom:
       "0"
   },
 
+
   verdict: {
     marginTop:
       "24px",
+
     padding:
       "22px",
+
     background:
       "#080b12",
+
     border:
       "1px solid",
+
     borderRadius:
       "14px"
   },
+
 
   verdictLabel: {
     color:
       "#7f899b",
+
     fontSize:
       "11px",
+
     letterSpacing:
       "1.5px"
   },
 
+
   verdictTitle: {
     fontSize:
       "28px",
+
     fontWeight:
       "700",
+
     marginTop:
       "8px"
   },
 
+
   verdictMessage: {
     color:
       "#8d96a8",
+
     marginTop:
       "8px",
+
     lineHeight:
       1.5
   },
+
 
   researchEngine: {
     marginTop:
       "16px",
+
     padding:
       "20px",
+
     background:
       "#080b12",
+
     border:
       "1px solid",
+
     borderRadius:
       "14px"
   },
+
 
   researchEngineHeader: {
     display:
       "flex",
+
     justifyContent:
       "space-between",
+
     alignItems:
       "center",
+
     gap:
       "20px"
   },
+
 
   researchEngineEyebrow: {
     color:
       "#687386",
+
     fontSize:
       "10px",
+
     letterSpacing:
       "1.5px",
+
     marginBottom:
       "6px"
   },
+
 
   researchEngineTitle: {
     fontSize:
       "20px",
+
     fontWeight:
       "700"
   },
+
 
   researchEngineStatus: {
     fontSize:
       "11px",
+
     letterSpacing:
       "1px",
+
     fontWeight:
       "700"
   },
+
 
   researchEngineMessage: {
     marginTop:
       "10px",
+
     color:
       "#8d96a8",
+
     fontSize:
       "13px",
+
     lineHeight:
       1.5
   },
+
 
   researchSummaryGrid: {
     display:
       "grid",
+
     gridTemplateColumns:
       "repeat(auto-fit, minmax(160px, 1fr))",
+
     gap:
       "10px",
+
     marginTop:
       "16px"
   },
+
 
   researchMetric: {
     background:
       "#0b1019",
+
     border:
       "1px solid #1e2738",
+
     borderRadius:
       "10px",
+
     padding:
       "12px"
   },
+
 
   researchMetricLabel: {
     color:
       "#687386",
+
     fontSize:
       "9px",
+
     letterSpacing:
       "1px",
+
     textTransform:
       "uppercase"
   },
 
+
   researchMetricValue: {
     color:
       "#d3d9e5",
+
     fontSize:
       "13px",
+
     fontWeight:
       "700",
+
     marginTop:
       "6px",
+
     wordBreak:
       "break-word"
   },
 
+
   robustnessGate: {
     marginTop:
       "16px",
+
     padding:
       "20px",
+
     background:
       "#080b12",
+
     border:
       "1px solid",
+
     borderRadius:
       "14px"
   },
+
 
   gateHeader: {
     display:
       "flex",
+
     justifyContent:
       "space-between",
+
     alignItems:
       "center",
+
     gap:
       "20px"
   },
 
+
   gateEyebrow: {
     color:
       "#687386",
+
     fontSize:
       "10px",
+
     letterSpacing:
       "1.5px",
+
     marginBottom:
       "6px"
   },
 
+
   gateTitle: {
     fontSize:
       "20px",
+
     fontWeight:
       "700"
   },
+
 
   gateScore: {
     fontSize:
       "26px",
+
     fontWeight:
       "700"
   },
+
 
   gateScoreSmall: {
     color:
       "#687386",
+
     fontSize:
       "13px",
+
     fontWeight:
       "400"
   },
 
+
   gateMessage: {
     marginTop:
       "10px",
+
     color:
       "#8d96a8",
+
     fontSize:
       "13px",
+
     lineHeight:
       1.5
   },
 
+
   progressTrack: {
     height:
       "6px",
+
     background:
       "#111722",
+
     borderRadius:
       "20px",
+
     overflow:
       "hidden",
+
     marginTop:
       "16px"
   },
 
+
   progressBar: {
     height:
       "100%",
+
     borderRadius:
       "20px",
+
     transition:
       "width 0.3s ease"
   },
 
+
   stageBox: {
     marginTop:
       "18px",
+
     padding:
       "18px",
+
     background:
       "#0b1019",
+
     border:
       "1px solid #1e2738",
+
     borderRadius:
       "14px"
   },
 
+
   stageHeader: {
     display:
       "flex",
+
     justifyContent:
       "space-between",
+
     alignItems:
       "center",
+
     gap:
       "12px",
+
     marginBottom:
       "12px",
+
     flexWrap:
       "wrap"
   },
 
+
   stageLabel: {
     color:
       "#9da8bb",
+
     fontSize:
       "11px",
+
     letterSpacing:
       "1px",
+
     fontWeight:
       "700"
   },
+
 
   stageCurrent: {
     color:
       "#596477",
+
     fontSize:
       "10px"
   },
+
 
   stageList: {
     display:
       "grid",
+
     gap:
       "7px"
   },
 
+
   stage: {
     display:
       "grid",
+
     gridTemplateColumns:
       "38px 1fr auto",
+
     alignItems:
       "center",
+
     gap:
       "12px",
+
     padding:
       "8px 0"
   },
 
+
   stageNumber: {
     width:
       "28px",
+
     height:
       "28px",
+
     border:
       "1px solid",
+
     borderRadius:
       "50%",
+
     display:
       "flex",
+
     alignItems:
       "center",
+
     justifyContent:
       "center",
+
     color:
       "#9da8bb",
+
     fontSize:
       "10px"
   },
 
+
   stageName: {
     color:
       "#aeb7c7",
+
     fontSize:
       "12px"
   },
 
+
   stageStatus: {
     fontSize:
       "9px",
+
     letterSpacing:
       "1px",
+
     fontWeight:
       "700"
   },
 
+
   toggleButton: {
     width:
       "100%",
+
     marginTop:
       "16px",
+
     padding:
       "14px 16px",
+
     background:
       "#0b1019",
+
     color:
       "#aeb7c7",
+
     border:
       "1px solid #1e2738",
+
     borderRadius:
       "10px",
+
     display:
       "flex",
+
     justifyContent:
       "space-between",
+
     alignItems:
       "center",
+
     fontSize:
       "12px",
+
     fontWeight:
       "700",
+
     letterSpacing:
       "1px",
+
     cursor:
       "pointer"
   },
 
+
   toggleIcon: {
     fontSize:
       "20px",
+
     fontWeight:
       "400",
+
     lineHeight:
       1
   },
+
 
   details: {
     marginTop:
       "4px"
   },
 
+
   subsectionTitle: {
     marginTop:
       "22px",
+
     marginBottom:
       "12px",
+
     color:
       "#9da8bb",
+
     fontSize:
       "13px",
+
     fontWeight:
       "700"
   },
+
 
   diagnosticGrid: {
     display:
       "grid",
+
     gridTemplateColumns:
       "repeat(auto-fit, minmax(200px, 1fr))",
+
     gap:
       "14px"
   },
+
 
   diagnosticCard: {
     background:
       "#080b12",
+
     border:
       "1px solid #1e2738",
+
     borderRadius:
       "12px",
+
     padding:
       "18px"
   },
 
+
   diagnosticTop: {
     display:
       "flex",
+
     justifyContent:
       "space-between",
+
     alignItems:
       "center",
+
     gap:
       "10px"
   },
+
 
   cardLabel: {
     color:
       "#7f899b",
+
     fontSize:
       "14px"
   },
 
+
   status: {
     fontSize:
       "11px",
+
     fontWeight:
       "700",
+
     letterSpacing:
       "1px",
+
     whiteSpace:
       "nowrap"
   },
 
+
   diagnosticDetail: {
     color:
       "#a0a9ba",
+
     fontSize:
       "13px",
+
     lineHeight:
       1.5,
+
     marginTop:
       "10px"
   },
+
 
   researchDetailGrid: {
     display:
       "grid",
+
     gridTemplateColumns:
       "repeat(auto-fit, minmax(160px, 1fr))",
+
     gap:
       "12px"
   },
+
 
   emptyResearch: {
     padding:
       "18px",
+
     background:
       "#080b12",
+
     border:
       "1px solid #1e2738",
+
     borderRadius:
       "12px",
+
     color:
       "#7f899b",
+
     fontSize:
       "13px",
+
     lineHeight:
       1.5
   },
+
 
   experimentBox: {
     marginTop:
       "14px",
+
     padding:
       "18px",
+
     background:
       "#0b1019",
+
     border:
       "1px solid #1e2738",
+
     borderRadius:
       "12px"
   },
+
 
   experimentTitle: {
     color:
       "#d3d9e5",
+
     fontSize:
       "13px",
+
     fontWeight:
       "700",
+
     marginBottom:
       "10px"
   },
 
+
   experimentList: {
     display:
       "grid",
+
     gap:
       "8px"
   },
 
+
   experimentRow: {
     display:
       "flex",
+
     justifyContent:
       "space-between",
+
     alignItems:
       "center",
+
     gap:
       "12px",
+
     padding:
       "10px 0",
+
     borderBottom:
       "1px solid #1e2738"
   },
 
+
   experimentName: {
     color:
       "#aeb7c7",
+
     fontSize:
       "12px"
   },
 
+
   experimentDetail: {
     color:
       "#687386",
+
     fontSize:
       "11px",
+
     marginTop:
       "4px"
   },
 
+
   experimentStatus: {
     fontSize:
       "9px",
+
     letterSpacing:
       "1px",
+
     fontWeight:
       "700"
   },
+
 
   scoreMethod: {
     marginTop:
       "22px",
+
     padding:
       "18px",
+
     borderRadius:
       "12px",
+
     background:
       "#0b1019",
+
     border:
       "1px solid #1e2738"
   },
 
+
   scoreMethodTitle: {
     color:
       "#d3d9e5",
+
     fontSize:
       "13px",
+
     fontWeight:
       "700"
   },
 
+
   scoreMethodText: {
     marginTop:
       "7px",
+
     color:
       "#7f899b",
+
     fontSize:
       "12px",
+
     lineHeight:
       1.5
   },
 
+
   researchNote: {
     marginTop:
       "14px",
+
     padding:
       "18px",
+
     borderRadius:
       "12px",
+
     background:
       "#0b1019",
+
     color:
       "#9da8bb",
+
     fontSize:
       "13px",
+
     lineHeight:
       1.5
   },
+
 
   researchNoteText: {
     margin:
       "8px 0 0"
   },
 
+
   nextAction: {
     marginTop:
       "14px",
+
     padding:
       "18px",
+
     borderRadius:
       "12px",
+
     background:
       "#080b12",
+
     border:
       "1px solid #1e2738"
   },
 
+
   nextActionLabel: {
     color:
       "#687386",
+
     fontSize:
       "10px",
+
     letterSpacing:
       "1.5px",
+
     marginBottom:
       "7px"
   },
 
+
   nextActionTitle: {
     color:
       "#d3d9e5",
+
     fontSize:
       "15px",
+
     fontWeight:
       "700"
   },
 
+
   nextActionText: {
     marginTop:
       "6px",
+
     color:
       "#7f899b",
+
     fontSize:
       "12px",
+
     lineHeight:
       1.5
   }
 
 };
+    
+    
+  
