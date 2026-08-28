@@ -1,31 +1,39 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 
 import {
   calculateDiagnostics,
   getResearchVerdict
 } from "../lib/diagnostics";
 
-
 export default function ResearchDiagnostics({
   results
 }) {
   const [expanded, setExpanded] = useState(false);
 
-  /*
-   * IMPORTANT:
-   * Do not place hooks after the early return.
-   * This component only needs useState, so all calculations
-   * can safely happen after checking results.
-   */
+  const diagnosticsResult = useMemo(() => {
+    if (!results) {
+      return null;
+    }
 
-  if (!results) {
+    return calculateDiagnostics(results);
+  }, [results]);
+
+  const robustness = useMemo(() => {
+    if (!results || !diagnosticsResult) {
+      return null;
+    }
+
+    return buildRobustnessAssessment(
+      results,
+      diagnosticsResult
+    );
+  }, [results, diagnosticsResult]);
+
+  if (!results || !diagnosticsResult || !robustness) {
     return null;
   }
-
-  const diagnostics =
-    calculateDiagnostics(results) || {};
 
   const {
     pf,
@@ -33,36 +41,16 @@ export default function ResearchDiagnostics({
     totalR,
     drawdown,
     trades,
-    checks = {}
-  } = diagnostics;
+    checks
+  } = diagnosticsResult;
 
-  const researchVerdict =
-    getResearchVerdict(results) || {};
-
-  const verdict =
-    researchVerdict.verdict ||
-    "INSUFFICIENT DATA";
-
-  const verdictMessage =
-    researchVerdict.message ||
-    "The available historical data is not sufficient to establish a reliable research conclusion.";
-
-  const robustness =
-    buildRobustnessAssessment(
-      results,
-      {
-        pf,
-        expectancy,
-        totalR,
-        drawdown,
-        trades,
-        checks
-      }
-    );
+  const {
+    verdict,
+    message: verdictMessage
+  } = getResearchVerdict(results);
 
   const verdictStyle =
     getVerdictStyle(verdict);
-
 
   return (
     <section style={styles.panel}>
@@ -76,9 +64,7 @@ export default function ResearchDiagnostics({
       </div>
 
       <div style={styles.headerRow}>
-
         <div>
-
           <h2 style={styles.panelTitle}>
             Statistical Edge Assessment
           </h2>
@@ -89,9 +75,7 @@ export default function ResearchDiagnostics({
             robustness before a strategy advances
             toward live-market validation.
           </p>
-
         </div>
-
       </div>
 
 
@@ -140,7 +124,6 @@ export default function ResearchDiagnostics({
         <div style={styles.gateHeader}>
 
           <div>
-
             <div style={styles.gateEyebrow}>
               RESEARCH GATE
             </div>
@@ -153,9 +136,7 @@ export default function ResearchDiagnostics({
             >
               {robustness.label}
             </div>
-
           </div>
-
 
           <div
             style={{
@@ -163,25 +144,19 @@ export default function ResearchDiagnostics({
               color: robustness.color
             }}
           >
-
             {robustness.score}
-
             <span style={styles.gateScoreSmall}>
               /100
             </span>
-
           </div>
 
         </div>
-
 
         <div style={styles.gateMessage}>
           {robustness.message}
         </div>
 
-
         <div style={styles.progressTrack}>
-
           <div
             style={{
               ...styles.progressBar,
@@ -189,7 +164,6 @@ export default function ResearchDiagnostics({
               background: robustness.color
             }}
           />
-
         </div>
 
       </div>
@@ -213,7 +187,6 @@ export default function ResearchDiagnostics({
 
         </div>
 
-
         <div style={styles.stageList}>
 
           <Stage
@@ -231,9 +204,7 @@ export default function ResearchDiagnostics({
                 ? "NEXT"
                 : "LOCKED"
             }
-            active={
-              robustness.nextStage
-            }
+            active={robustness.nextStage}
           />
 
           <Stage
@@ -277,11 +248,9 @@ export default function ResearchDiagnostics({
 
       <button
         type="button"
-        onClick={() =>
-          setExpanded(
-            (value) => !value
-          )
-        }
+        onClick={() => setExpanded(
+          current => !current
+        )}
         style={styles.toggleButton}
       >
 
@@ -303,28 +272,21 @@ export default function ResearchDiagnostics({
          ====================================================== */}
 
       {expanded && (
-
         <div style={styles.details}>
 
-          {/* ==================================================
+          {/* --------------------------------------------------
              CORE DIAGNOSTICS
-             ================================================== */}
+             -------------------------------------------------- */}
 
           <div style={styles.subsectionTitle}>
             Core Diagnostic Checks
           </div>
 
-
           <div style={styles.diagnosticGrid}>
 
             <Diagnostic
               label="Profit Factor"
-              passed={
-                checks.profitability === true
-              }
-              neutral={
-                checks.profitability == null
-              }
+              passed={checks.profitability}
               detail={
                 Number.isFinite(pf)
                   ? `${pf.toFixed(2)} · target > 1.00`
@@ -332,15 +294,9 @@ export default function ResearchDiagnostics({
               }
             />
 
-
             <Diagnostic
               label="Expectancy"
-              passed={
-                checks.expectancy === true
-              }
-              neutral={
-                checks.expectancy == null
-              }
+              passed={checks.expectancy}
               detail={
                 Number.isFinite(expectancy)
                   ? `${expectancy.toFixed(3)} R · target > 0`
@@ -348,15 +304,9 @@ export default function ResearchDiagnostics({
               }
             />
 
-
             <Diagnostic
               label="Net Result"
-              passed={
-                checks.equity === true
-              }
-              neutral={
-                checks.equity == null
-              }
+              passed={checks.equity}
               detail={
                 Number.isFinite(totalR)
                   ? `${totalR.toFixed(2)} R · target > 0`
@@ -364,15 +314,9 @@ export default function ResearchDiagnostics({
               }
             />
 
-
             <Diagnostic
               label="Sample Size"
-              passed={
-                checks.sample === true
-              }
-              neutral={
-                checks.sample == null
-              }
+              passed={checks.sample}
               detail={
                 `${Number(
                   trades || 0
@@ -380,15 +324,9 @@ export default function ResearchDiagnostics({
               }
             />
 
-
             <Diagnostic
               label="Drawdown"
-              passed={
-                checks.drawdown === true
-              }
-              neutral={
-                checks.drawdown == null
-              }
+              passed={checks.drawdown}
               detail={
                 Number.isFinite(drawdown)
                   ? `${(
@@ -401,37 +339,57 @@ export default function ResearchDiagnostics({
           </div>
 
 
-          {/* ==================================================
-             ROBUSTNESS
-             ================================================== */}
+          {/* --------------------------------------------------
+             ROBUSTNESS ASSESSMENT
+             -------------------------------------------------- */}
 
           <div style={styles.subsectionTitle}>
             Robustness Assessment
           </div>
 
-
           <div style={styles.diagnosticGrid}>
 
             {robustness.checks.map(
-              (check) => (
-
+              check => (
                 <Diagnostic
                   key={check.id}
                   label={check.label}
                   passed={check.passed}
                   detail={check.detail}
                   neutral={check.neutral}
+                  status={check.status}
                 />
-
               )
             )}
 
           </div>
 
 
-          {/* ==================================================
+          {/* --------------------------------------------------
+             SCORE METHODOLOGY
+             -------------------------------------------------- */}
+
+          <div style={styles.scoreMethod}>
+
+            <div style={styles.scoreMethodTitle}>
+              Research Score Methodology
+            </div>
+
+            <div style={styles.scoreMethodText}>
+              ATLAS uses a fixed 100-point research-readiness
+              scale. Missing evidence does not disappear from
+              the denominator. A strategy must earn its score
+              through profitability, expectancy, sample size,
+              risk control and stability across historical
+              conditions.
+            </div>
+
+          </div>
+
+
+          {/* --------------------------------------------------
              RESEARCH INTERPRETATION
-             ================================================== */}
+             -------------------------------------------------- */}
 
           <div style={styles.researchNote}>
 
@@ -452,9 +410,9 @@ export default function ResearchDiagnostics({
           </div>
 
 
-          {/* ==================================================
+          {/* --------------------------------------------------
              NEXT ACTION
-             ================================================== */}
+             -------------------------------------------------- */}
 
           <div style={styles.nextAction}>
 
@@ -473,7 +431,6 @@ export default function ResearchDiagnostics({
           </div>
 
         </div>
-
       )}
 
     </section>
@@ -497,10 +454,8 @@ function buildRobustnessAssessment(
     trades
   } = metrics;
 
-
   const diagnostics =
     results?.diagnostics || {};
-
 
   const years =
     diagnostics.years || {};
@@ -519,21 +474,26 @@ function buildRobustnessAssessment(
 
 
   /* ==========================================================
-     SAMPLE QUALITY
+     RAW DATA
      ========================================================== */
 
   const sampleTrades =
     Number(trades || 0);
 
-  const sampleAvailable =
-    Number.isFinite(sampleTrades);
+  const finiteNumber = value =>
+    Number.isFinite(Number(value))
+      ? Number(value)
+      : null;
+
+
+  /* ==========================================================
+     SAMPLE QUALITY
+     ========================================================== */
 
   const samplePass =
-    sampleAvailable &&
     sampleTrades >= 100;
 
-  const strongSample =
-    sampleAvailable &&
+  const sampleStrong =
     sampleTrades >= 300;
 
 
@@ -541,15 +501,12 @@ function buildRobustnessAssessment(
      PROFIT FACTOR
      ========================================================== */
 
-  const pfAvailable =
-    Number.isFinite(pf);
-
   const pfPass =
-    pfAvailable &&
+    Number.isFinite(pf) &&
     pf > 1;
 
-  const strongPF =
-    pfAvailable &&
+  const pfStrong =
+    Number.isFinite(pf) &&
     pf >= 1.30;
 
 
@@ -557,15 +514,12 @@ function buildRobustnessAssessment(
      EXPECTANCY
      ========================================================== */
 
-  const expectancyAvailable =
-    Number.isFinite(expectancy);
-
   const expectancyPass =
-    expectancyAvailable &&
+    Number.isFinite(expectancy) &&
     expectancy > 0;
 
-  const strongExpectancy =
-    expectancyAvailable &&
+  const expectancyStrong =
+    Number.isFinite(expectancy) &&
     expectancy >= 0.10;
 
 
@@ -573,11 +527,8 @@ function buildRobustnessAssessment(
      NET RESULT
      ========================================================== */
 
-  const totalRAvailable =
-    Number.isFinite(totalR);
-
   const totalRPass =
-    totalRAvailable &&
+    Number.isFinite(totalR) &&
     totalR > 0;
 
 
@@ -585,15 +536,12 @@ function buildRobustnessAssessment(
      DRAWDOWN
      ========================================================== */
 
-  const drawdownAvailable =
-    Number.isFinite(drawdown);
-
   const ddPass =
-    drawdownAvailable &&
+    Number.isFinite(drawdown) &&
     drawdown < 0.25;
 
-  const strongDD =
-    drawdownAvailable &&
+  const ddStrong =
+    Number.isFinite(drawdown) &&
     drawdown < 0.15;
 
 
@@ -602,35 +550,36 @@ function buildRobustnessAssessment(
      ========================================================== */
 
   const yearEntries =
-    Object.values(years);
-
+    Object.values(years || {});
 
   const validYears =
     yearEntries.filter(
-      (year) =>
+      year =>
         Number.isFinite(
           Number(year?.totalR)
         )
     );
 
-
   const positiveYears =
     validYears.filter(
-      (year) =>
+      year =>
         Number(year.totalR) > 0
     );
 
-
   const yearConsistency =
-    validYears.length > 0
+    validYears.length
       ? positiveYears.length /
         validYears.length
       : null;
 
-
-  const yearPass =
-    yearConsistency != null &&
-    yearConsistency >= 0.60;
+  const yearStatus =
+    getStabilityStatus(
+      yearConsistency,
+      {
+        pass: 0.60,
+        weak: 0.40
+      }
+    );
 
 
   /* ==========================================================
@@ -638,30 +587,36 @@ function buildRobustnessAssessment(
      ========================================================== */
 
   const monthEntries =
-    Object.values(months);
-
+    Object.values(months || {});
 
   const validMonths =
     monthEntries.filter(
-      (month) =>
+      month =>
         Number.isFinite(
           Number(month?.totalR)
         )
     );
 
-
   const positiveMonths =
     validMonths.filter(
-      (month) =>
+      month =>
         Number(month.totalR) > 0
     );
 
-
   const monthConsistency =
-    validMonths.length > 0
+    validMonths.length
       ? positiveMonths.length /
         validMonths.length
       : null;
+
+  const monthStatus =
+    getStabilityStatus(
+      monthConsistency,
+      {
+        pass: 0.60,
+        weak: 0.50
+      }
+    );
 
 
   /* ==========================================================
@@ -669,30 +624,29 @@ function buildRobustnessAssessment(
      ========================================================== */
 
   const directionEntries =
-    Object.values(directions);
-
+    Object.values(directions || {});
 
   const profitableDirections =
     directionEntries.filter(
-      (direction) =>
+      direction =>
         Number(
           direction?.expectancy_R
         ) > 0
     );
 
+  const directionRatio =
+    directionEntries.length
+      ? profitableDirections.length /
+        directionEntries.length
+      : null;
 
-  const directionAvailable =
-    directionEntries.length > 0;
-
-
-  const directionPass =
-    directionAvailable &&
-    (
-      directionEntries.length <= 1 ||
-      profitableDirections.length >=
-        Math.ceil(
-          directionEntries.length / 2
-        )
+  const directionStatus =
+    getStabilityStatus(
+      directionRatio,
+      {
+        pass: 1.00,
+        weak: 0.50
+      }
     );
 
 
@@ -701,25 +655,30 @@ function buildRobustnessAssessment(
      ========================================================== */
 
   const sessionEntries =
-    Object.values(sessions);
-
-
-  const sessionAvailable =
-    sessionEntries.length > 0;
-
+    Object.values(sessions || {});
 
   const profitableSessions =
     sessionEntries.filter(
-      (session) =>
+      session =>
         Number(
           session?.expectancy_R
         ) > 0
     );
 
+  const sessionRatio =
+    sessionEntries.length
+      ? profitableSessions.length /
+        sessionEntries.length
+      : null;
 
-  const sessionPass =
-    sessionAvailable &&
-    profitableSessions.length > 0;
+  const sessionStatus =
+    getStabilityStatus(
+      sessionRatio,
+      {
+        pass: 0.75,
+        weak: 0.50
+      }
+    );
 
 
   /* ==========================================================
@@ -727,29 +686,201 @@ function buildRobustnessAssessment(
      ========================================================== */
 
   const volatilityEntries =
-    Object.values(volatility);
-
-
-  const volatilityAvailable =
-    volatilityEntries.length > 0;
-
+    Object.values(volatility || {});
 
   const profitableVolatility =
     volatilityEntries.filter(
-      (regime) =>
+      regime =>
         Number(
           regime?.expectancy_R
         ) > 0
     );
 
+  const volatilityRatio =
+    volatilityEntries.length
+      ? profitableVolatility.length /
+        volatilityEntries.length
+      : null;
 
-  const volatilityPass =
-    volatilityAvailable &&
-    profitableVolatility.length > 0;
+  const volatilityStatus =
+    getStabilityStatus(
+      volatilityRatio,
+      {
+        pass: 0.75,
+        weak: 0.50
+      }
+    );
 
 
   /* ==========================================================
-     CHECKS
+     TRADE BEHAVIOUR QUALITY
+     ========================================================== */
+
+  const averageMFE =
+    finiteNumber(
+      diagnostics.average_MFE_R
+    );
+
+  const averageMAE =
+    finiteNumber(
+      diagnostics.average_MAE_R
+    );
+
+  const maxConsecutiveLosses =
+    finiteNumber(
+      diagnostics.max_consecutive_losses
+    );
+
+  const mfeMaeAvailable =
+    averageMFE != null &&
+    averageMAE != null;
+
+  const mfeMaePass =
+    mfeMaeAvailable &&
+    averageMFE > Math.abs(averageMAE);
+
+  const lossStreakAvailable =
+    maxConsecutiveLosses != null;
+
+  const lossStreakPass =
+    lossStreakAvailable &&
+    maxConsecutiveLosses <= 8;
+
+
+  /* ==========================================================
+     FIXED 100-POINT SCORE
+     ==========================================================
+
+     IMPORTANT:
+
+     Missing evidence earns ZERO.
+
+     We do not divide by only the available checks.
+
+     This prevents incomplete research from appearing
+     stronger than it actually is.
+  */
+
+  let score = 0;
+
+
+  /* 15 — SAMPLE SIZE */
+
+  if (sampleStrong) {
+    score += 15;
+  } else if (samplePass) {
+    score += 7.5;
+  }
+
+
+  /* 15 — PROFIT FACTOR */
+
+  if (pfStrong) {
+    score += 15;
+  } else if (pfPass) {
+    score += 7.5;
+  }
+
+
+  /* 15 — EXPECTANCY */
+
+  if (expectancyStrong) {
+    score += 15;
+  } else if (expectancyPass) {
+    score += 7.5;
+  }
+
+
+  /* 10 — NET RESULT */
+
+  if (totalRPass) {
+    score += 10;
+  }
+
+
+  /* 10 — DRAWDOWN */
+
+  if (ddStrong) {
+    score += 10;
+  } else if (ddPass) {
+    score += 7.5;
+  }
+
+
+  /* 10 — YEAR CONSISTENCY */
+
+  if (yearStatus === "PASS") {
+    score += 10;
+  } else if (yearStatus === "WEAK") {
+    score += 5;
+  }
+
+
+  /* 5 — MONTH CONSISTENCY */
+
+  if (monthStatus === "PASS") {
+    score += 5;
+  } else if (monthStatus === "WEAK") {
+    score += 2.5;
+  }
+
+
+  /* 5 — DIRECTION STABILITY */
+
+  if (directionStatus === "PASS") {
+    score += 5;
+  } else if (directionStatus === "WEAK") {
+    score += 2.5;
+  }
+
+
+  /* 5 — SESSION STABILITY */
+
+  if (sessionStatus === "PASS") {
+    score += 5;
+  } else if (sessionStatus === "WEAK") {
+    score += 2.5;
+  }
+
+
+  /* 5 — VOLATILITY STABILITY */
+
+  if (volatilityStatus === "PASS") {
+    score += 5;
+  } else if (volatilityStatus === "WEAK") {
+    score += 2.5;
+  }
+
+
+  /* ==========================================================
+     TRADE QUALITY OVERLAY
+     ==========================================================
+
+     These metrics are displayed as diagnostic evidence,
+     but are not added to the core 100-point scale yet.
+     This keeps the score mathematically stable.
+  */
+
+  const tradeQuality = {
+    mfeMaeAvailable,
+    mfeMaePass,
+    lossStreakAvailable,
+    lossStreakPass
+  };
+
+
+  const normalizedScore =
+    Math.max(
+      0,
+      Math.min(
+        100,
+        Math.round(score)
+      )
+    );
+
+
+  /* ==========================================================
+     ROBUSTNESS CHECKS
      ========================================================== */
 
   const checks = [
@@ -758,69 +889,73 @@ function buildRobustnessAssessment(
       id: "sample",
       label: "Sample Size",
       passed: samplePass,
-      neutral: !sampleAvailable,
+      status: samplePass
+        ? "PASS"
+        : "FAIL",
       detail:
-        sampleAvailable
-          ? `${sampleTrades.toLocaleString()} trades`
-          : "Unavailable"
+        `${sampleTrades.toLocaleString()} trades`
     },
-
 
     {
       id: "profit-factor",
       label: "Profitability Quality",
       passed: pfPass,
-      neutral: !pfAvailable,
+      status: pfPass
+        ? "PASS"
+        : "FAIL",
       detail:
-        pfAvailable
+        Number.isFinite(pf)
           ? `PF ${pf.toFixed(2)}`
           : "Unavailable"
     },
-
 
     {
       id: "expectancy",
       label: "Positive Expectancy",
       passed: expectancyPass,
-      neutral: !expectancyAvailable,
+      status: expectancyPass
+        ? "PASS"
+        : "FAIL",
       detail:
-        expectancyAvailable
+        Number.isFinite(expectancy)
           ? `${expectancy.toFixed(3)} R`
           : "Unavailable"
     },
-
 
     {
       id: "net-result",
       label: "Positive Net Result",
       passed: totalRPass,
-      neutral: !totalRAvailable,
+      status: totalRPass
+        ? "PASS"
+        : "FAIL",
       detail:
-        totalRAvailable
+        Number.isFinite(totalR)
           ? `${totalR.toFixed(2)} R`
           : "Unavailable"
     },
-
 
     {
       id: "drawdown",
       label: "Drawdown Control",
       passed: ddPass,
-      neutral: !drawdownAvailable,
+      status: ddPass
+        ? "PASS"
+        : "FAIL",
       detail:
-        drawdownAvailable
+        Number.isFinite(drawdown)
           ? `${(
               drawdown * 100
             ).toFixed(2)}%`
           : "Unavailable"
     },
 
-
     {
       id: "year-consistency",
       label: "Year Consistency",
-      passed: yearPass,
-      neutral: validYears.length === 0,
+      passed: yearStatus === "PASS",
+      neutral: yearStatus === "N/A",
+      status: yearStatus,
       detail:
         yearConsistency != null
           ? `${(
@@ -829,179 +964,122 @@ function buildRobustnessAssessment(
           : "Needs yearly data"
     },
 
+    {
+      id: "month-consistency",
+      label: "Month Consistency",
+      passed: monthStatus === "PASS",
+      neutral: monthStatus === "N/A",
+      status: monthStatus,
+      detail:
+        monthConsistency != null
+          ? `${(
+              monthConsistency * 100
+            ).toFixed(1)}% profitable months`
+          : "Needs monthly data"
+    },
 
     {
       id: "direction",
       label: "Direction Stability",
-      passed: directionPass,
-      neutral: !directionAvailable,
+      passed: directionStatus === "PASS",
+      neutral: directionStatus === "N/A",
+      status: directionStatus,
       detail:
-        directionAvailable
+        directionEntries.length
           ? `${profitableDirections.length}/${directionEntries.length} profitable`
           : "Needs direction data"
     },
 
-
     {
       id: "sessions",
       label: "Session Stability",
-      passed: sessionPass,
-      neutral: !sessionAvailable,
+      passed: sessionStatus === "PASS",
+      neutral: sessionStatus === "N/A",
+      status: sessionStatus,
       detail:
-        sessionAvailable
+        sessionEntries.length
           ? `${profitableSessions.length}/${sessionEntries.length} positive`
           : "Needs session data"
     },
 
-
     {
       id: "volatility",
       label: "Volatility Stability",
-      passed: volatilityPass,
-      neutral: !volatilityAvailable,
+      passed: volatilityStatus === "PASS",
+      neutral: volatilityStatus === "N/A",
+      status: volatilityStatus,
       detail:
-        volatilityAvailable
+        volatilityEntries.length
           ? `${profitableVolatility.length}/${volatilityEntries.length} positive`
           : "Needs volatility data"
+    },
+
+    {
+      id: "mfe-mae",
+      label: "MFE / MAE Quality",
+      passed: mfeMaePass,
+      neutral: !mfeMaeAvailable,
+      status:
+        !mfeMaeAvailable
+          ? "N/A"
+          : mfeMaePass
+          ? "PASS"
+          : "FAIL",
+      detail:
+        mfeMaeAvailable
+          ? `MFE ${averageMFE.toFixed(3)} R · MAE ${averageMAE.toFixed(3)} R`
+          : "Needs MFE/MAE data"
+    },
+
+    {
+      id: "loss-streak",
+      label: "Loss Streak Control",
+      passed: lossStreakPass,
+      neutral: !lossStreakAvailable,
+      status:
+        !lossStreakAvailable
+          ? "N/A"
+          : lossStreakPass
+          ? "PASS"
+          : "FAIL",
+      detail:
+        lossStreakAvailable
+          ? `Maximum ${maxConsecutiveLosses.toFixed(0)} consecutive losses`
+          : "Needs loss-streak data"
     }
 
   ];
 
 
   /* ==========================================================
-     SCORE
+     RESEARCH GATE
      ========================================================== */
 
-  /*
-   * Core checks carry most of the score.
-   *
-   * Optional diagnostics only contribute when the backend
-   * actually provides them.
-   */
+  const coreEstablished =
+    samplePass &&
+    pfPass &&
+    expectancyPass &&
+    totalRPass;
 
-  const weightedChecks = [
+  const strongCore =
+    sampleStrong &&
+    pfStrong &&
+    expectancyStrong &&
+    totalRPass &&
+    ddStrong;
 
-    {
-      available: sampleAvailable,
-      passed: samplePass,
-      weight: 15
-    },
+  const stabilityEstablished =
+    yearStatus !== "FAIL" &&
+    directionStatus !== "FAIL" &&
+    sessionStatus !== "FAIL" &&
+    volatilityStatus !== "FAIL";
 
-    {
-      available: pfAvailable,
-      passed: pfPass,
-      weight: 15
-    },
+  const robustnessCandidate =
+    normalizedScore >= 75 &&
+    strongCore &&
+    yearStatus === "PASS" &&
+    stabilityEstablished;
 
-    {
-      available: expectancyAvailable,
-      passed: expectancyPass,
-      weight: 15
-    },
-
-    {
-      available: totalRAvailable,
-      passed: totalRPass,
-      weight: 10
-    },
-
-    {
-      available: drawdownAvailable,
-      passed: ddPass,
-      weight: 15
-    },
-
-    {
-      available: validYears.length > 0,
-      passed: yearPass,
-      weight: 10
-    },
-
-    {
-      available: monthConsistency != null,
-      passed:
-        monthConsistency != null &&
-        monthConsistency >= 0.50,
-      weight: 5
-    }
-
-  ];
-
-
-  let availableWeight = 0;
-  let earnedWeight = 0;
-
-
-  weightedChecks.forEach(
-    (check) => {
-
-      if (!check.available) {
-        return;
-      }
-
-      availableWeight +=
-        check.weight;
-
-      if (check.passed) {
-        earnedWeight +=
-          check.weight;
-      }
-
-    }
-  );
-
-
-  /*
-   * Quality bonuses.
-   */
-
-  let bonus = 0;
-
-
-  if (strongSample) {
-    bonus += 5;
-  }
-
-  if (strongPF) {
-    bonus += 5;
-  }
-
-  if (strongExpectancy) {
-    bonus += 5;
-  }
-
-  if (strongDD) {
-    bonus += 5;
-  }
-
-
-  const baseScore =
-    availableWeight > 0
-      ? (
-          earnedWeight /
-          availableWeight
-        ) * 100
-      : 0;
-
-
-  /*
-   * Bonuses are deliberately capped so they cannot
-   * compensate for missing core evidence.
-   */
-
-  const normalizedScore =
-    Math.min(
-      100,
-      Math.round(
-        baseScore +
-        bonus
-      )
-    );
-
-
-  /* ==========================================================
-     RESEARCH STATUS
-     ========================================================== */
 
   let label;
   let color;
@@ -1012,142 +1090,103 @@ function buildRobustnessAssessment(
   let nextActionMessage;
 
 
-  /*
-   * Core evidence must exist before the strategy can
-   * become a robustness candidate.
-   */
+  /* ----------------------------------------------------------
+     EDGE NOT ESTABLISHED
+     ---------------------------------------------------------- */
 
-  const coreDataAvailable =
-    pfAvailable &&
-    expectancyAvailable &&
-    totalRAvailable &&
-    sampleAvailable &&
-    drawdownAvailable;
+  if (!coreEstablished) {
 
-
-  const corePositive =
-    pfPass &&
-    expectancyPass &&
-    totalRPass;
-
-
-  if (
-    !coreDataAvailable ||
-    !corePositive
-  ) {
-
-    label =
-      "EDGE NOT ESTABLISHED";
-
-    color =
-      "#ff9b9b";
-
-    border =
-      "#6b3038";
+    label = "EDGE NOT ESTABLISHED";
+    color = "#ff9b9b";
+    border = "#6b3038";
 
     message =
       "The historical test does not yet establish a sufficiently strong positive edge.";
 
-    nextStage =
-      false;
+    nextStage = false;
 
     nextAction =
       "Improve or reject the strategy";
 
     nextActionMessage =
-      "Do not advance to robustness testing until the core historical metrics provide credible positive evidence.";
-
+      "Do not advance to robustness testing until sample size, profitability, expectancy and net result provide credible positive evidence.";
   }
 
+
+  /* ----------------------------------------------------------
+     CORE EDGE EXISTS BUT STABILITY IS WEAK
+     ---------------------------------------------------------- */
+
   else if (
-    normalizedScore >= 75 &&
-    strongSample &&
-    strongPF &&
-    strongExpectancy &&
-    strongDD &&
-    yearPass
+    normalizedScore >= 55 &&
+    !robustnessCandidate
   ) {
 
-    label =
-      "ROBUSTNESS CANDIDATE";
-
-    color =
-      "#a8e6bb";
-
-    border =
-      "#315f42";
+    label = "PROMISING — NEEDS VALIDATION";
+    color = "#d3d9e5";
+    border = "#394052";
 
     message =
-      "The historical evidence is strong enough to justify deeper robustness testing.";
+      "The strategy shows evidence of an edge, but the historical evidence is not yet sufficiently stable for robustness approval.";
 
-    nextStage =
-      true;
+    nextStage = false;
+
+    nextAction =
+      "Strengthen historical evidence";
+
+    nextActionMessage =
+      "Increase the sample and investigate consistency across years, months, sessions, directions and volatility regimes before advancing.";
+  }
+
+
+  /* ----------------------------------------------------------
+     ROBUSTNESS CANDIDATE
+     ---------------------------------------------------------- */
+
+  else if (robustnessCandidate) {
+
+    label = "ROBUSTNESS CANDIDATE";
+    color = "#a8e6bb";
+    border = "#315f42";
+
+    message =
+      "The historical evidence is strong enough to justify formal robustness testing.";
+
+    nextStage = true;
 
     nextAction =
       "Run robustness testing";
 
     nextActionMessage =
-      "Stress the strategy against unseen periods, parameter changes and statistical uncertainty.";
-
+      "Stress the strategy against parameter changes, market regimes and statistical uncertainty.";
   }
 
-  else if (
-    normalizedScore >= 55
-  ) {
 
-    label =
-      "PROMISING — NEEDS VALIDATION";
-
-    color =
-      "#d3d9e5";
-
-    border =
-      "#394052";
-
-    message =
-      "The strategy shows evidence of an edge, but the evidence is not yet strong enough to consider it robust.";
-
-    nextStage =
-      true;
-
-    nextAction =
-      "Run robustness testing";
-
-    nextActionMessage =
-      "Determine whether the observed edge survives conditions outside this historical backtest.";
-
-  }
+  /* ----------------------------------------------------------
+     WEAK EDGE
+     ---------------------------------------------------------- */
 
   else {
 
-    label =
-      "WEAK EDGE";
-
-    color =
-      "#ffcf8a";
-
-    border =
-      "#66502d";
+    label = "WEAK EDGE";
+    color = "#ffcf8a";
+    border = "#66502d";
 
     message =
-      "The backtest contains positive evidence, but the overall evidence remains too fragile for advancement.";
+      "The backtest contains some positive evidence, but the edge remains too fragile for advancement.";
 
-    nextStage =
-      false;
+    nextStage = false;
 
     nextAction =
       "Investigate the edge";
 
     nextActionMessage =
-      "Determine whether performance depends excessively on a particular period, direction, session or market regime.";
-
+      "Determine whether performance depends excessively on a particular year, session, direction or volatility regime.";
   }
 
 
   return {
-    score:
-      normalizedScore,
-
+    score: normalizedScore,
     label,
     color,
     border,
@@ -1155,8 +1194,33 @@ function buildRobustnessAssessment(
     nextStage,
     nextAction,
     nextActionMessage,
-    checks
+    checks,
+    tradeQuality
   };
+}
+
+
+/* ============================================================
+   STABILITY STATUS
+   ============================================================ */
+
+function getStabilityStatus(
+  ratio,
+  thresholds
+) {
+  if (ratio == null) {
+    return "N/A";
+  }
+
+  if (ratio >= thresholds.pass) {
+    return "PASS";
+  }
+
+  if (ratio >= thresholds.weak) {
+    return "WEAK";
+  }
+
+  return "FAIL";
 }
 
 
@@ -1164,46 +1228,38 @@ function buildRobustnessAssessment(
    VERDICT STYLE
    ============================================================ */
 
-function getVerdictStyle(
-  verdict
-) {
+function getVerdictStyle(verdict) {
 
-  if (
-    verdict ===
-    "POSITIVE EDGE"
-  ) {
-
+  if (verdict === "POSITIVE EDGE") {
     return {
       border: "#315f42",
       color: "#a8e6bb"
     };
-
   }
 
-
-  if (
-    verdict ===
-    "NO EDGE"
-  ) {
-
+  if (verdict === "NO EDGE") {
     return {
       border: "#6b3038",
       color: "#ff9b9b"
     };
-
   }
 
+  if (verdict === "INSUFFICIENT SAMPLE") {
+    return {
+      border: "#394052",
+      color: "#d3d9e5"
+    };
+  }
 
   return {
     border: "#394052",
     color: "#d3d9e5"
   };
-
 }
 
 
 /* ============================================================
-   VALIDATION STAGE
+   STAGE
    ============================================================ */
 
 function Stage({
@@ -1212,13 +1268,10 @@ function Stage({
   status,
   active = false
 }) {
-
   return (
-
     <div
       style={{
         ...styles.stage,
-
         opacity:
           status === "LOCKED"
             ? 0.45
@@ -1229,7 +1282,6 @@ function Stage({
       <div
         style={{
           ...styles.stageNumber,
-
           borderColor:
             active
               ? "#697589"
@@ -1239,16 +1291,13 @@ function Stage({
         {number}
       </div>
 
-
       <div style={styles.stageName}>
         {title}
       </div>
 
-
       <div
         style={{
           ...styles.stageStatus,
-
           color:
             active
               ? "#d3d9e5"
@@ -1259,9 +1308,7 @@ function Stage({
       </div>
 
     </div>
-
   );
-
 }
 
 
@@ -1273,27 +1320,42 @@ function Diagnostic({
   label,
   passed,
   detail,
-  neutral = false
+  neutral = false,
+  status
 }) {
 
-  const statusColor =
-    neutral
-      ? "#7f899b"
-      : passed
-      ? "#a8e6bb"
-      : "#ff9b9b";
+  let statusText;
+  let statusColor;
 
+  if (neutral || status === "N/A") {
 
-  const statusText =
-    neutral
-      ? "N/A"
-      : passed
-      ? "PASS"
-      : "FAIL";
+    statusText = "N/A";
+    statusColor = "#7f899b";
 
+  } else if (status === "WEAK") {
+
+    statusText = "WEAK";
+    statusColor = "#ffcf8a";
+
+  } else if (status === "FAIL") {
+
+    statusText = "FAIL";
+    statusColor = "#ff9b9b";
+
+  } else {
+
+    statusText =
+      passed
+        ? "PASS"
+        : "FAIL";
+
+    statusColor =
+      passed
+        ? "#a8e6bb"
+        : "#ff9b9b";
+  }
 
   return (
-
     <div style={styles.diagnosticCard}>
 
       <div style={styles.diagnosticTop}>
@@ -1301,7 +1363,6 @@ function Diagnostic({
         <span style={styles.cardLabel}>
           {label}
         </span>
-
 
         <span
           style={{
@@ -1314,15 +1375,12 @@ function Diagnostic({
 
       </div>
 
-
       <div style={styles.diagnosticDetail}>
         {detail}
       </div>
 
     </div>
-
   );
-
 }
 
 
@@ -1340,7 +1398,6 @@ const styles = {
     marginTop: "28px"
   },
 
-
   eyebrow: {
     color: "#7f899b",
     fontSize: "12px",
@@ -1348,19 +1405,16 @@ const styles = {
     marginBottom: "8px"
   },
 
-
   headerRow: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "flex-start"
   },
 
-
   panelTitle: {
     fontSize: "28px",
     margin: "8px 0"
   },
-
 
   description: {
     color: "#8d96a8",
@@ -1368,7 +1422,6 @@ const styles = {
     maxWidth: "720px",
     marginBottom: "0"
   },
-
 
   verdict: {
     marginTop: "24px",
@@ -1378,13 +1431,11 @@ const styles = {
     borderRadius: "14px"
   },
 
-
   verdictLabel: {
     color: "#7f899b",
     fontSize: "11px",
     letterSpacing: "1.5px"
   },
-
 
   verdictTitle: {
     fontSize: "28px",
@@ -1392,13 +1443,11 @@ const styles = {
     marginTop: "8px"
   },
 
-
   verdictMessage: {
     color: "#8d96a8",
     marginTop: "8px",
     lineHeight: 1.5
   },
-
 
   robustnessGate: {
     marginTop: "16px",
@@ -1408,14 +1457,12 @@ const styles = {
     borderRadius: "14px"
   },
 
-
   gateHeader: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: "20px"
   },
-
 
   gateEyebrow: {
     color: "#687386",
@@ -1424,18 +1471,15 @@ const styles = {
     marginBottom: "6px"
   },
 
-
   gateTitle: {
     fontSize: "20px",
     fontWeight: "700"
   },
 
-
   gateScore: {
     fontSize: "26px",
     fontWeight: "700"
   },
-
 
   gateScoreSmall: {
     color: "#687386",
@@ -1443,14 +1487,12 @@ const styles = {
     fontWeight: "400"
   },
 
-
   gateMessage: {
     marginTop: "10px",
     color: "#8d96a8",
     fontSize: "13px",
     lineHeight: 1.5
   },
-
 
   progressTrack: {
     height: "6px",
@@ -1460,13 +1502,11 @@ const styles = {
     marginTop: "16px"
   },
 
-
   progressBar: {
     height: "100%",
     borderRadius: "20px",
     transition: "width 0.3s ease"
   },
-
 
   stageBox: {
     marginTop: "18px",
@@ -1475,7 +1515,6 @@ const styles = {
     border: "1px solid #1e2738",
     borderRadius: "14px"
   },
-
 
   stageHeader: {
     display: "flex",
@@ -1486,7 +1525,6 @@ const styles = {
     flexWrap: "wrap"
   },
 
-
   stageLabel: {
     color: "#9da8bb",
     fontSize: "11px",
@@ -1494,18 +1532,15 @@ const styles = {
     fontWeight: "700"
   },
 
-
   stageCurrent: {
     color: "#596477",
     fontSize: "10px"
   },
 
-
   stageList: {
     display: "grid",
     gap: "7px"
   },
-
 
   stage: {
     display: "grid",
@@ -1515,7 +1550,6 @@ const styles = {
     gap: "12px",
     padding: "8px 0"
   },
-
 
   stageNumber: {
     width: "28px",
@@ -1529,19 +1563,16 @@ const styles = {
     fontSize: "10px"
   },
 
-
   stageName: {
     color: "#aeb7c7",
     fontSize: "12px"
   },
-
 
   stageStatus: {
     fontSize: "9px",
     letterSpacing: "1px",
     fontWeight: "700"
   },
-
 
   toggleButton: {
     width: "100%",
@@ -1560,18 +1591,15 @@ const styles = {
     cursor: "pointer"
   },
 
-
   toggleIcon: {
     fontSize: "20px",
     fontWeight: "400",
     lineHeight: 1
   },
 
-
   details: {
     marginTop: "4px"
   },
-
 
   subsectionTitle: {
     marginTop: "22px",
@@ -1581,14 +1609,12 @@ const styles = {
     fontWeight: "700"
   },
 
-
   diagnosticGrid: {
     display: "grid",
     gridTemplateColumns:
       "repeat(auto-fit, minmax(200px, 1fr))",
     gap: "14px"
   },
-
 
   diagnosticCard: {
     background: "#080b12",
@@ -1597,26 +1623,24 @@ const styles = {
     padding: "18px"
   },
 
-
   diagnosticTop: {
     display: "flex",
     justifyContent: "space-between",
-    alignItems: "center"
+    alignItems: "center",
+    gap: "10px"
   },
-
 
   cardLabel: {
     color: "#7f899b",
     fontSize: "14px"
   },
 
-
   status: {
     fontSize: "11px",
     fontWeight: "700",
-    letterSpacing: "1px"
+    letterSpacing: "1px",
+    whiteSpace: "nowrap"
   },
-
 
   diagnosticDetail: {
     color: "#a0a9ba",
@@ -1625,9 +1649,29 @@ const styles = {
     marginTop: "10px"
   },
 
+  scoreMethod: {
+    marginTop: "22px",
+    padding: "18px",
+    borderRadius: "12px",
+    background: "#0b1019",
+    border: "1px solid #1e2738"
+  },
+
+  scoreMethodTitle: {
+    color: "#d3d9e5",
+    fontSize: "13px",
+    fontWeight: "700"
+  },
+
+  scoreMethodText: {
+    marginTop: "7px",
+    color: "#7f899b",
+    fontSize: "12px",
+    lineHeight: 1.5
+  },
 
   researchNote: {
-    marginTop: "22px",
+    marginTop: "14px",
     padding: "18px",
     borderRadius: "12px",
     background: "#0b1019",
@@ -1636,11 +1680,9 @@ const styles = {
     lineHeight: 1.5
   },
 
-
   researchNoteText: {
     margin: "8px 0 0"
   },
-
 
   nextAction: {
     marginTop: "14px",
@@ -1650,7 +1692,6 @@ const styles = {
     border: "1px solid #1e2738"
   },
 
-
   nextActionLabel: {
     color: "#687386",
     fontSize: "10px",
@@ -1658,13 +1699,11 @@ const styles = {
     marginBottom: "7px"
   },
 
-
   nextActionTitle: {
     color: "#d3d9e5",
     fontSize: "15px",
     fontWeight: "700"
   },
-
 
   nextActionText: {
     marginTop: "6px",
