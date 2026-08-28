@@ -55,83 +55,132 @@ export function calculateDiagnostics(results = {}) {
    RESEARCH VERDICT
    ============================================================ */
 
+/*
+ * IMPORTANT:
+ *
+ * This function determines the BASIC historical verdict only.
+ *
+ * It does NOT determine whether the strategy is ready for
+ * robustness testing. That decision belongs to the separate
+ * robustness gate in ResearchDiagnostics.js.
+ *
+ * Therefore:
+ *
+ * HISTORICAL BACKTEST
+ *        ↓
+ * BASIC VERDICT
+ *        ↓
+ * ROBUSTNESS GATE
+ *        ↓
+ * OOS / WALK-FORWARD / MONTE CARLO / PAPER / LIVE
+ *
+ * Drawdown is a hard research-risk requirement for a
+ * POSITIVE EDGE verdict.
+ */
+
 export function getResearchVerdict(results = {}) {
   const {
     checks
   } = calculateDiagnostics(results);
 
-  const positiveChecks =
-    Object.values(checks)
-      .filter(Boolean)
-      .length;
+
+  /* ==========================================================
+     1. SAMPLE SIZE
+     ========================================================== */
 
   /*
-   * Not enough trades to make a
+   * ATLAS requires at least 100 trades before making a
    * meaningful statistical judgment.
    */
 
   if (!checks.sample) {
     return {
       verdict: "INSUFFICIENT SAMPLE",
+
       message:
         "The current test does not contain enough trades to make a reliable statistical judgment."
     };
   }
 
+
+  /* ==========================================================
+     2. CORE EDGE REQUIREMENTS
+     ========================================================== */
+
   /*
-   * A strategy cannot demonstrate
-   * an edge without positive
-   * profitability, expectancy
-   * and equity growth.
+   * A historical edge requires all three:
+   *
+   * - Profit Factor > 1
+   * - Expectancy > 0
+   * - Positive Net Result
+   *
+   * Failure of any one means there is currently no
+   * sufficiently demonstrated historical edge.
    */
 
-  if (
-    !checks.profitability ||
-    !checks.expectancy ||
-    !checks.equity
-  ) {
+  const coreEdge =
+    checks.profitability &&
+    checks.expectancy &&
+    checks.equity;
+
+
+  if (!coreEdge) {
     return {
       verdict: "NO EDGE",
+
       message:
         "The tested strategy does not currently demonstrate a positive statistical edge."
     };
   }
 
-  /*
-   * Strong research result.
-   */
 
-  if (
-    checks.profitability &&
-    checks.expectancy &&
-    checks.equity &&
-    checks.sample &&
-    checks.drawdown &&
-    positiveChecks >= 4
-  ) {
-    return {
-      verdict: "POSITIVE EDGE",
-      message:
-        "The current test demonstrates positive profitability, expectancy and equity growth within the research risk limits."
-    };
-  }
+  /* ==========================================================
+     3. RISK CONTROL
+     ========================================================== */
 
   /*
-   * Positive characteristics,
-   * but requires additional validation.
+   * A strategy can be profitable while carrying unacceptable
+   * historical risk.
+   *
+   * Therefore drawdown is NOT optional for POSITIVE EDGE.
+   *
+   * Research limit:
+   *
+   * maximum drawdown < 25%
    */
 
-  if (positiveChecks >= 3) {
+  if (!checks.drawdown) {
     return {
       verdict: "PROMISING",
+
       message:
-        "The strategy shows positive characteristics but requires additional validation before being considered reliable."
+        "The strategy demonstrates positive profitability, expectancy and equity growth, but historical drawdown exceeds the research risk limit. Additional risk investigation is required before the strategy can be considered a positive research edge."
     };
   }
 
+
+  /* ==========================================================
+     4. POSITIVE HISTORICAL EDGE
+     ========================================================== */
+
+  /*
+   * At this point:
+   *
+   * sample       PASS
+   * profitability PASS
+   * expectancy    PASS
+   * equity        PASS
+   * drawdown      PASS
+   *
+   * This establishes a positive historical edge.
+   *
+   * It does NOT establish robustness.
+   */
+
   return {
-    verdict: "INCONCLUSIVE",
+    verdict: "POSITIVE EDGE",
+
     message:
-      "ATLAS needs more evidence before judging the strategy."
+      "The current historical test demonstrates positive profitability, expectancy and equity growth within the research risk limits."
   };
 }
