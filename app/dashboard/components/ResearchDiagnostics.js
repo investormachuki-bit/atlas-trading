@@ -8,49 +8,46 @@ import {
 } from "../lib/diagnostics";
 
 
-/* ============================================================
-   RESEARCH DIAGNOSTICS
-   ============================================================ */
-
 export default function ResearchDiagnostics({
   results
 }) {
-  const [expanded, setExpanded] =
-    useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  const diagnosticsResult = useMemo(() => {
+    if (!results) {
+      return null;
+    }
+
+    return calculateDiagnostics(results);
+  }, [results]);
 
 
-  const diagnosticsResult =
-    useMemo(() => {
-      if (!results) {
-        return null;
-      }
+  const robustness = useMemo(() => {
+    if (!results || !diagnosticsResult) {
+      return null;
+    }
 
-      return calculateDiagnostics(results);
-    }, [results]);
-
-
-  const robustness =
-    useMemo(() => {
-      if (!results || !diagnosticsResult) {
-        return null;
-      }
-
-      return buildRobustnessAssessment(
-        results,
-        diagnosticsResult
-      );
-    }, [
+    return buildRobustnessAssessment(
       results,
       diagnosticsResult
-    ]);
+    );
+  }, [results, diagnosticsResult]);
 
 
-  const research =
-    useMemo(() => {
-      return buildResearchAssessment(
-        results
-      );
-    }, [results]);
+  const researchEngine = useMemo(
+    () => getResearchEngine(results),
+    [results]
+  );
+
+
+  const validation = useMemo(
+    () => buildValidationPipeline(
+      results,
+      researchEngine,
+      robustness
+    ),
+    [results, researchEngine, robustness]
+  );
 
 
   if (
@@ -112,14 +109,13 @@ export default function ResearchDiagnostics({
 
 
       {/* ======================================================
-         HISTORICAL VERDICT
+         HISTORICAL BACKTEST VERDICT
          ====================================================== */}
 
       <div
         style={{
           ...styles.verdict,
-          borderColor:
-            verdictStyle.border
+          borderColor: verdictStyle.border
         }}
       >
 
@@ -130,8 +126,7 @@ export default function ResearchDiagnostics({
         <div
           style={{
             ...styles.verdictTitle,
-            color:
-              verdictStyle.color
+            color: verdictStyle.color
           }}
         >
           {verdict}
@@ -148,9 +143,11 @@ export default function ResearchDiagnostics({
          RESEARCH ENGINE
          ====================================================== */}
 
-      <ResearchEnginePanel
-        research={research}
-      />
+      {researchEngine.available && (
+        <ResearchEngineCard
+          researchEngine={researchEngine}
+        />
+      )}
 
 
       {/* ======================================================
@@ -160,8 +157,7 @@ export default function ResearchDiagnostics({
       <div
         style={{
           ...styles.robustnessGate,
-          borderColor:
-            robustness.border
+          borderColor: robustness.border
         }}
       >
 
@@ -176,8 +172,7 @@ export default function ResearchDiagnostics({
             <div
               style={{
                 ...styles.gateTitle,
-                color:
-                  robustness.color
+                color: robustness.color
               }}
             >
               {robustness.label}
@@ -188,17 +183,12 @@ export default function ResearchDiagnostics({
           <div
             style={{
               ...styles.gateScore,
-              color:
-                robustness.color
+              color: robustness.color
             }}
           >
             {robustness.score}
 
-            <span
-              style={
-                styles.gateScoreSmall
-              }
-            >
+            <span style={styles.gateScoreSmall}>
               /100
             </span>
           </div>
@@ -214,10 +204,8 @@ export default function ResearchDiagnostics({
           <div
             style={{
               ...styles.progressBar,
-              width:
-                `${robustness.score}%`,
-              background:
-                robustness.color
+              width: `${robustness.score}%`,
+              background: robustness.color
             }}
           />
 
@@ -230,10 +218,37 @@ export default function ResearchDiagnostics({
          VALIDATION PIPELINE
          ====================================================== */}
 
-      <ValidationPipeline
-        robustness={robustness}
-        research={research}
-      />
+      <div style={styles.stageBox}>
+
+        <div style={styles.stageHeader}>
+
+          <span style={styles.stageLabel}>
+            VALIDATION PIPELINE
+          </span>
+
+          <span style={styles.stageCurrent}>
+            {validation.header}
+          </span>
+
+        </div>
+
+
+        <div style={styles.stageList}>
+
+          {validation.stages.map(stage => (
+            <Stage
+              key={stage.number}
+              number={stage.number}
+              title={stage.title}
+              status={stage.status}
+              active={stage.active}
+              tone={stage.tone}
+            />
+          ))}
+
+        </div>
+
+      </div>
 
 
       {/* ======================================================
@@ -243,9 +258,7 @@ export default function ResearchDiagnostics({
       <button
         type="button"
         onClick={() =>
-          setExpanded(
-            current => !current
-          )
+          setExpanded(current => !current)
         }
         style={styles.toggleButton}
       >
@@ -257,9 +270,7 @@ export default function ResearchDiagnostics({
         </span>
 
         <span style={styles.toggleIcon}>
-          {expanded
-            ? "−"
-            : "+"}
+          {expanded ? "−" : "+"}
         </span>
 
       </button>
@@ -284,9 +295,7 @@ export default function ResearchDiagnostics({
 
             <Diagnostic
               label="Profit Factor"
-              passed={
-                checks.profitability
-              }
+              passed={checks.profitability}
               detail={
                 Number.isFinite(pf)
                   ? `${pf.toFixed(2)} · target > 1.00`
@@ -296,13 +305,9 @@ export default function ResearchDiagnostics({
 
             <Diagnostic
               label="Expectancy"
-              passed={
-                checks.expectancy
-              }
+              passed={checks.expectancy}
               detail={
-                Number.isFinite(
-                  expectancy
-                )
+                Number.isFinite(expectancy)
                   ? `${expectancy.toFixed(3)} R · target > 0`
                   : "Unavailable"
               }
@@ -310,13 +315,9 @@ export default function ResearchDiagnostics({
 
             <Diagnostic
               label="Net Result"
-              passed={
-                checks.equity
-              }
+              passed={checks.equity}
               detail={
-                Number.isFinite(
-                  totalR
-                )
+                Number.isFinite(totalR)
                   ? `${totalR.toFixed(2)} R · target > 0`
                   : "Unavailable"
               }
@@ -324,9 +325,7 @@ export default function ResearchDiagnostics({
 
             <Diagnostic
               label="Sample Size"
-              passed={
-                checks.sample
-              }
+              passed={checks.sample}
               detail={
                 `${Number(
                   trades || 0
@@ -336,13 +335,9 @@ export default function ResearchDiagnostics({
 
             <Diagnostic
               label="Drawdown"
-              passed={
-                checks.drawdown
-              }
+              passed={checks.drawdown}
               detail={
-                Number.isFinite(
-                  drawdown
-                )
+                Number.isFinite(drawdown)
                   ? `${(
                       drawdown * 100
                     ).toFixed(2)}% · research limit < 25%`
@@ -354,80 +349,7 @@ export default function ResearchDiagnostics({
 
 
           {/* --------------------------------------------------
-             HISTORICAL CONSISTENCY
-             -------------------------------------------------- */}
-
-          <div style={styles.subsectionTitle}>
-            Historical Consistency
-          </div>
-
-          <div style={styles.diagnosticGrid}>
-
-            <HistoricalDiagnostic
-              label="Year Consistency"
-              value={
-                robustness.yearConsistency
-              }
-              status={
-                robustness.yearStatus
-              }
-              emptyText="Needs yearly data"
-              suffix="profitable years"
-            />
-
-            <HistoricalDiagnostic
-              label="Month Consistency"
-              value={
-                robustness.monthConsistency
-              }
-              status={
-                robustness.monthStatus
-              }
-              emptyText="Needs monthly data"
-              suffix="profitable months"
-            />
-
-            <HistoricalDiagnostic
-              label="Direction Stability"
-              value={
-                robustness.directionRatio
-              }
-              status={
-                robustness.directionStatus
-              }
-              emptyText="Needs direction data"
-              suffix="positive directions"
-            />
-
-            <HistoricalDiagnostic
-              label="Session Stability"
-              value={
-                robustness.sessionRatio
-              }
-              status={
-                robustness.sessionStatus
-              }
-              emptyText="Needs session data"
-              suffix="positive sessions"
-            />
-
-            <HistoricalDiagnostic
-              label="Volatility Stability"
-              value={
-                robustness.volatilityRatio
-              }
-              status={
-                robustness.volatilityStatus
-              }
-              emptyText="Needs volatility data"
-              suffix="positive regimes"
-            />
-
-          </div>
-
-
-          {/* --------------------------------------------------
-             ROBUSTNESS
+             ROBUSTNESS ASSESSMENT
              -------------------------------------------------- */}
 
           <div style={styles.subsectionTitle}>
@@ -436,18 +358,16 @@ export default function ResearchDiagnostics({
 
           <div style={styles.diagnosticGrid}>
 
-            {robustness.checks.map(
-              check => (
-                <Diagnostic
-                  key={check.id}
-                  label={check.label}
-                  passed={check.passed}
-                  detail={check.detail}
-                  neutral={check.neutral}
-                  status={check.status}
-                />
-              )
-            )}
+            {robustness.checks.map(check => (
+              <Diagnostic
+                key={check.id}
+                label={check.label}
+                passed={check.passed}
+                detail={check.detail}
+                neutral={check.neutral}
+                status={check.status}
+              />
+            ))}
 
           </div>
 
@@ -456,13 +376,110 @@ export default function ResearchDiagnostics({
              RESEARCH ENGINE DETAILS
              -------------------------------------------------- */}
 
-          <div style={styles.subsectionTitle}>
-            Research Engine
-          </div>
+          {researchEngine.available && (
+            <>
+              <div style={styles.subsectionTitle}>
+                Research Engine
+              </div>
 
-          <ResearchDetails
-            research={research}
-          />
+              <div style={styles.diagnosticGrid}>
+
+                <Diagnostic
+                  label="Research Engine"
+                  passed={
+                    researchEngine.status === "COMPLETE"
+                  }
+                  neutral={
+                    researchEngine.status === "N/A"
+                  }
+                  status={
+                    researchEngine.status
+                  }
+                  detail={
+                    researchEngine.message
+                  }
+                />
+
+                <Diagnostic
+                  label="Research Verdict"
+                  passed={
+                    researchEngine.verdict ===
+                    "POSITIVE_EDGE"
+                  }
+                  neutral={
+                    researchEngine.verdict ===
+                    "N/A"
+                  }
+                  status={
+                    researchEngine.verdictStatus
+                  }
+                  detail={
+                    researchEngine.verdict
+                  }
+                />
+
+                <Diagnostic
+                  label="Research Score"
+                  passed={
+                    researchEngine.score != null &&
+                    researchEngine.score >= 75
+                  }
+                  neutral={
+                    researchEngine.score == null
+                  }
+                  status={
+                    researchEngine.score == null
+                      ? "N/A"
+                      : researchEngine.score >= 75
+                      ? "PASS"
+                      : "FAIL"
+                  }
+                  detail={
+                    researchEngine.score != null
+                      ? `${researchEngine.score}/100`
+                      : "Not available"
+                  }
+                />
+
+                <Diagnostic
+                  label="Out-of-Sample"
+                  passed={
+                    researchEngine.oosStatus ===
+                    "PASS"
+                  }
+                  neutral={
+                    researchEngine.oosStatus ===
+                    "N/A"
+                  }
+                  status={
+                    researchEngine.oosStatus
+                  }
+                  detail={
+                    researchEngine.oosDetail
+                  }
+                />
+
+                <Diagnostic
+                  label="Walk-Forward"
+                  passed={
+                    researchEngine.walkForward.status ===
+                    "PASS"
+                  }
+                  neutral={
+                    researchEngine.walkForward.status ===
+                    "N/A"
+                  }
+                  status={
+                    researchEngine.walkForward.status
+                  }
+                  detail={
+                    researchEngine.walkForward.detail
+                  }
+                />
+
+              </div>
+            </>
+          )}
 
 
           {/* --------------------------------------------------
@@ -477,14 +494,12 @@ export default function ResearchDiagnostics({
 
             <div style={styles.scoreMethodText}>
               ATLAS uses a fixed 100-point
-              historical research-readiness
-              scale. Missing evidence earns
-              zero rather than being removed
-              from the denominator. The score
-              evaluates sample quality,
-              profitability, expectancy,
-              net result, drawdown and
-              historical stability.
+              research-readiness scale. Missing
+              evidence earns zero rather than being
+              removed from the denominator. A strategy
+              must earn its score through profitability,
+              expectancy, sample size, risk control and
+              stability across historical conditions.
             </div>
 
           </div>
@@ -501,14 +516,11 @@ export default function ResearchDiagnostics({
             </strong>
 
             <p style={styles.researchNoteText}>
-              A profitable historical backtest
-              is evidence of a possible edge,
-              not proof of a tradable strategy.
-              ATLAS must determine whether the
-              edge survives unseen data,
-              parameter changes, market regimes
-              and statistical uncertainty before
-              progression toward live trading.
+              A profitable historical backtest is
+              evidence of a possible edge, not proof
+              of a tradable strategy. The edge must
+              survive unseen data, regime changes and
+              statistical stress before advancement.
             </p>
 
           </div>
@@ -525,13 +537,11 @@ export default function ResearchDiagnostics({
             </div>
 
             <div style={styles.nextActionTitle}>
-              {research.nextAction ||
-                robustness.nextAction}
+              {robustness.nextAction}
             </div>
 
             <div style={styles.nextActionText}>
-              {research.nextActionMessage ||
-                robustness.nextActionMessage}
+              {robustness.nextActionMessage}
             </div>
 
           </div>
@@ -545,274 +555,549 @@ export default function ResearchDiagnostics({
 
 
 /* ============================================================
-   RESEARCH ENGINE PANEL
+   RESEARCH ENGINE EXTRACTION
    ============================================================ */
 
-function ResearchEnginePanel({
-  research
-}) {
-  const style =
-    getResearchEngineStyle(
-      research.status
+function getResearchEngine(results) {
+
+  const source =
+    results?.research_engine ||
+    results?.researchEngine ||
+    results?.research ||
+    results?.research_results ||
+    results?.researchResults ||
+    null;
+
+
+  const walkForward =
+    source?.walk_forward ||
+    source?.walkForward ||
+    results?.walk_forward ||
+    results?.walkForward ||
+    results?.validation?.walk_forward ||
+    results?.validation?.walkForward ||
+    null;
+
+
+  const available =
+    !!source ||
+    !!walkForward;
+
+
+  if (!available) {
+    return {
+      available: false,
+      status: "N/A",
+      verdict: "N/A",
+      verdictStatus: "N/A",
+      score: null,
+      oosStatus: "N/A",
+      oosDetail: "Not available",
+      message: "Research Engine data not available.",
+      walkForward: {
+        status: "N/A",
+        detail: "Not available"
+      }
+    };
+  }
+
+
+  const rawStatus =
+    source?.status ||
+    source?.engine_status ||
+    source?.engineStatus ||
+    null;
+
+
+  const status =
+    normalizeResearchStatus(
+      rawStatus,
+      source
     );
 
-  return (
-    <div
-      style={{
-        ...styles.researchEngine,
-        borderColor:
-          style.border
-      }}
-    >
 
-      <div style={styles.researchEngineHeader}>
+  const rawVerdict =
+    source?.research_verdict ||
+    source?.researchVerdict ||
+    source?.verdict ||
+    null;
 
-        <div>
 
-          <div
-            style={
-              styles.researchEngineEyebrow
-            }
-          >
-            ATLAS RESEARCH ENGINE
-          </div>
+  const verdict =
+    normalizeVerdict(rawVerdict);
 
-          <div
-            style={{
-              ...styles.researchEngineTitle,
-              color:
-                style.color
-            }}
-          >
-            {research.label}
-          </div>
 
-        </div>
+  const verdictStatus =
+    verdict === "POSITIVE_EDGE"
+      ? "PASS"
+      : verdict === "N/A"
+      ? "N/A"
+      : verdict === "INSUFFICIENT_SAMPLE"
+      ? "WEAK"
+      : "FAIL";
 
-        <div
-          style={{
-            ...styles.researchEngineStatus,
-            color:
-              style.color
-          }}
-        >
-          {research.status}
-        </div>
 
-      </div>
+  const rawScore =
+    source?.research_score ??
+    source?.researchScore ??
+    source?.score ??
+    null;
 
-      <div style={styles.researchEngineMessage}>
-        {research.message}
-      </div>
 
-      {research.hasResearch && (
-        <div style={styles.researchSummaryGrid}>
+  const score =
+    Number.isFinite(
+      Number(rawScore)
+    )
+      ? Number(rawScore)
+      : null;
 
-          <ResearchMetric
-            label="Research Verdict"
-            value={
-              research.verdict ||
-              "N/A"
-            }
-          />
 
-          <ResearchMetric
-            label="Research Score"
-            value={
-              research.score != null
-                ? `${research.score}/100`
-                : "N/A"
-            }
-          />
+  const oos =
+    source?.oos ||
+    source?.out_of_sample ||
+    source?.outOfSample ||
+    null;
 
-          <ResearchMetric
-            label="OOS"
-            value={
-              research.oosAvailable
-                ? "AVAILABLE"
-                : "N/A"
-            }
-          />
 
-          <ResearchMetric
-            label="Walk-Forward"
-            value={
-              research.walkForwardAvailable
-                ? "AVAILABLE"
-                : "LOCKED"
-            }
-          />
+  const oosStatus =
+    getValidationStatus(
+      oos
+    );
 
-        </div>
-      )}
 
-    </div>
-  );
+  const oosDetail =
+    getValidationDetail(
+      oos,
+      "Out-of-sample result not available"
+    );
+
+
+  const walkForwardStatus =
+    getWalkForwardStatus(
+      walkForward
+    );
+
+
+  const walkForwardDetail =
+    getWalkForwardDetail(
+      walkForward
+    );
+
+
+  let message;
+
+  if (
+    status === "FAILED"
+  ) {
+    message =
+      source?.error ||
+      "The Research Engine failed.";
+  } else if (
+    verdict === "INSUFFICIENT_SAMPLE"
+  ) {
+    message =
+      "The Research Engine considers the available evidence insufficient for a reliable conclusion.";
+  } else if (
+    verdict === "NO_EDGE"
+  ) {
+    message =
+      "The Research Engine found insufficient evidence of a positive historical edge.";
+  } else if (
+    verdict === "POSITIVE_EDGE"
+  ) {
+    message =
+      "The Research Engine found evidence consistent with a positive historical edge.";
+  } else {
+    message =
+      "Research Engine completed with the available evidence.";
+  }
+
+
+  return {
+    available: true,
+    status,
+    verdict,
+    verdictStatus,
+    score,
+    oosStatus,
+    oosDetail,
+    message,
+
+    walkForward: {
+      status:
+        walkForwardStatus,
+      detail:
+        walkForwardDetail
+    }
+  };
 }
 
 
 /* ============================================================
-   RESEARCH DETAILS
+   RESEARCH STATUS
    ============================================================ */
 
-function ResearchDetails({
-  research
-}) {
-  if (!research.hasResearch) {
-    return (
-      <div style={styles.emptyResearch}>
-        {research.message}
-      </div>
+function normalizeResearchStatus(
+  status,
+  source
+) {
+
+  const value =
+    String(
+      status || ""
+    ).toUpperCase();
+
+
+  if (
+    value === "FAILED" ||
+    value === "FAIL" ||
+    value === "ERROR"
+  ) {
+    return "FAILED";
+  }
+
+
+  if (
+    value === "COMPLETE" ||
+    value === "COMPLETED" ||
+    value === "SUCCESS"
+  ) {
+    return "COMPLETE";
+  }
+
+
+  if (
+    source?.completed === true ||
+    source?.complete === true
+  ) {
+    return "COMPLETE";
+  }
+
+
+  return "N/A";
+}
+
+
+/* ============================================================
+   VERDICT NORMALIZATION
+   ============================================================ */
+
+function normalizeVerdict(
+  value
+) {
+
+  if (!value) {
+    return "N/A";
+  }
+
+
+  const normalized =
+    String(value)
+      .trim()
+      .toUpperCase()
+      .replace(/ /g, "_");
+
+
+  if (
+    normalized === "POSITIVE_EDGE" ||
+    normalized === "POSITIVE"
+  ) {
+    return "POSITIVE_EDGE";
+  }
+
+
+  if (
+    normalized === "NO_EDGE"
+  ) {
+    return "NO_EDGE";
+  }
+
+
+  if (
+    normalized === "INSUFFICIENT_SAMPLE"
+  ) {
+    return "INSUFFICIENT_SAMPLE";
+  }
+
+
+  return normalized;
+}
+
+
+/* ============================================================
+   VALIDATION STATUS
+   ============================================================ */
+
+function getValidationStatus(
+  value
+) {
+
+  if (!value) {
+    return "N/A";
+  }
+
+
+  if (
+    value?.passed === true ||
+    value?.pass === true ||
+    value?.status === "PASS" ||
+    value?.status === "PASSED" ||
+    value?.verdict === "PASS" ||
+    value?.verdict === "PASSED"
+  ) {
+    return "PASS";
+  }
+
+
+  if (
+    value?.passed === false ||
+    value?.pass === false ||
+    value?.status === "FAIL" ||
+    value?.status === "FAILED" ||
+    value?.verdict === "FAIL" ||
+    value?.verdict === "FAILED"
+  ) {
+    return "FAIL";
+  }
+
+
+  return "N/A";
+}
+
+
+/* ============================================================
+   VALIDATION DETAIL
+   ============================================================ */
+
+function getValidationDetail(
+  value,
+  fallback
+) {
+
+  if (!value) {
+    return fallback;
+  }
+
+
+  if (
+    value?.message
+  ) {
+    return value.message;
+  }
+
+
+  if (
+    value?.verdict
+  ) {
+    return String(
+      value.verdict
     );
   }
 
-  return (
-    <div>
 
-      <div style={styles.researchDetailGrid}>
-
-        <ResearchMetric
-          label="Status"
-          value={
-            research.status
-          }
-        />
-
-        <ResearchMetric
-          label="Verdict"
-          value={
-            research.verdict ||
-            "N/A"
-          }
-        />
-
-        <ResearchMetric
-          label="Score"
-          value={
-            research.score != null
-              ? `${research.score}/100`
-              : "N/A"
-          }
-        />
-
-        <ResearchMetric
-          label="In-Sample"
-          value={
-            research.isAvailable
-              ? "AVAILABLE"
-              : "N/A"
-          }
-        />
-
-        <ResearchMetric
-          label="Out-of-Sample"
-          value={
-            research.oosAvailable
-              ? "AVAILABLE"
-              : "N/A"
-          }
-        />
-
-        <ResearchMetric
-          label="Walk-Forward"
-          value={
-            research.walkForwardAvailable
-              ? "AVAILABLE"
-              : "LOCKED"
-          }
-        />
-
-      </div>
+  if (
+    value?.status
+  ) {
+    return String(
+      value.status
+    );
+  }
 
 
-      {research.experiments.length > 0 && (
-        <div style={styles.experimentBox}>
-
-          <div style={styles.experimentTitle}>
-            Research Experiments
-          </div>
-
-          <div style={styles.experimentList}>
-
-            {research.experiments.map(
-              experiment => (
-                <div
-                  key={experiment.id}
-                  style={
-                    styles.experimentRow
-                  }
-                >
-
-                  <div>
-
-                    <div
-                      style={
-                        styles.experimentName
-                      }
-                    >
-                      {experiment.name}
-                    </div>
-
-                    {experiment.detail && (
-                      <div
-                        style={
-                          styles.experimentDetail
-                        }
-                      >
-                        {experiment.detail}
-                      </div>
-                    )}
-
-                  </div>
-
-                  <div
-                    style={{
-                      ...styles.experimentStatus,
-                      color:
-                        experiment.passed
-                          ? "#a8e6bb"
-                          : "#ffcf8a"
-                    }}
-                  >
-                    {experiment.passed
-                      ? "PASS"
-                      : "REVIEW"}
-                  </div>
-
-                </div>
-              )
-            )}
-
-          </div>
-
-        </div>
-      )}
-
-    </div>
-  );
+  return fallback;
 }
 
 
 /* ============================================================
-   RESEARCH METRIC
+   WALK-FORWARD STATUS
+   ============================================================
+
+   IMPORTANT:
+
+   Presence of a walk-forward object does NOT mean
+   walk-forward passed.
+
+   The database currently stores:
+
+     verdict: WALK_FORWARD_FAIL
+     folds_completed: 0
+     folds_requested: 5
+     aggregate_out_of_sample.trades: 0
+
+   Therefore this function deliberately treats that
+   result as FAIL.
+   */
+
+function getWalkForwardStatus(
+  walkForward
+) {
+
+  if (!walkForward) {
+    return "N/A";
+  }
+
+
+  const verdict =
+    String(
+      walkForward?.verdict ||
+      walkForward?.status ||
+      ""
+    ).toUpperCase();
+
+
+  if (
+    verdict.includes("FAIL")
+  ) {
+    return "FAIL";
+  }
+
+
+  if (
+    verdict.includes("PASS") ||
+    verdict.includes("SUCCESS")
+  ) {
+    return "PASS";
+  }
+
+
+  const foldsCompleted =
+    Number(
+      walkForward?.folds_completed ??
+      walkForward?.foldsCompleted ??
+      0
+    );
+
+
+  const foldsRequested =
+    Number(
+      walkForward?.folds_requested ??
+      walkForward?.foldsRequested ??
+      0
+    );
+
+
+  const aggregate =
+    walkForward?.aggregate_out_of_sample ||
+    walkForward?.aggregateOutOfSample ||
+    {};
+
+
+  const oosTrades =
+    Number(
+      aggregate?.trades ||
+      0
+    );
+
+
+  if (
+    foldsRequested > 0 &&
+    foldsCompleted < foldsRequested
+  ) {
+    return "FAIL";
+  }
+
+
+  if (
+    foldsRequested > 0 &&
+    oosTrades === 0
+  ) {
+    return "FAIL";
+  }
+
+
+  if (
+    walkForward?.passed === true
+  ) {
+    return "PASS";
+  }
+
+
+  if (
+    walkForward?.passed === false
+  ) {
+    return "FAIL";
+  }
+
+
+  return "N/A";
+}
+
+
+/* ============================================================
+   WALK-FORWARD DETAIL
    ============================================================ */
 
-function ResearchMetric({
-  label,
-  value
-}) {
-  return (
-    <div style={styles.researchMetric}>
+function getWalkForwardDetail(
+  walkForward
+) {
 
-      <div style={styles.researchMetricLabel}>
-        {label}
-      </div>
+  if (!walkForward) {
+    return "Not available";
+  }
 
-      <div style={styles.researchMetricValue}>
-        {value}
-      </div>
 
-    </div>
+  const verdict =
+    walkForward?.verdict ||
+    walkForward?.status ||
+    "Unavailable";
+
+
+  const foldsCompleted =
+    Number(
+      walkForward?.folds_completed ??
+      walkForward?.foldsCompleted ??
+      0
+    );
+
+
+  const foldsRequested =
+    Number(
+      walkForward?.folds_requested ??
+      walkForward?.foldsRequested ??
+      0
+    );
+
+
+  const aggregate =
+    walkForward?.aggregate_out_of_sample ||
+    walkForward?.aggregateOutOfSample ||
+    {};
+
+
+  const oosTrades =
+    Number(
+      aggregate?.trades ||
+      0
+    );
+
+
+  if (
+    String(verdict)
+      .toUpperCase()
+      .includes("FAIL")
+  ) {
+
+    return (
+      `${verdict} · ` +
+      `${foldsCompleted}/${foldsRequested} folds · ` +
+      `${oosTrades} OOS trades`
+    );
+  }
+
+
+  if (
+    foldsRequested > 0
+  ) {
+
+    return (
+      `${foldsCompleted}/${foldsRequested} folds · ` +
+      `${oosTrades} OOS trades`
+    );
+  }
+
+
+  return String(
+    verdict
   );
 }
 
@@ -821,122 +1106,327 @@ function ResearchMetric({
    VALIDATION PIPELINE
    ============================================================ */
 
-function ValidationPipeline({
-  robustness,
-  research
+function buildValidationPipeline(
+  results,
+  researchEngine,
+  robustness
+) {
+
+  const walkForward =
+    researchEngine?.walkForward ||
+    {
+      status: "N/A"
+    };
+
+
+  const historicalStatus =
+    results?.status === "failed"
+      ? "FAILED"
+      : "COMPLETE";
+
+
+  let robustnessStatus;
+  let robustnessTone;
+
+
+  if (
+    robustness?.nextStage
+  ) {
+    robustnessStatus = "READY";
+    robustnessTone = "pass";
+  } else if (
+    robustness?.label ===
+    "EDGE NOT ESTABLISHED"
+  ) {
+    robustnessStatus = "LOCKED";
+    robustnessTone = "fail";
+  } else {
+    robustnessStatus = "REVIEW";
+    robustnessTone = "neutral";
+  }
+
+
+  let oosStatus =
+    "LOCKED";
+
+  let oosTone =
+    "locked";
+
+
+  if (
+    researchEngine?.oosStatus ===
+    "PASS"
+  ) {
+    oosStatus = "COMPLETE";
+    oosTone = "pass";
+  } else if (
+    researchEngine?.oosStatus ===
+    "FAIL"
+  ) {
+    oosStatus = "FAILED";
+    oosTone = "fail";
+  }
+
+
+  let walkStatus;
+  let walkTone;
+
+
+  if (
+    walkForward.status ===
+    "PASS"
+  ) {
+    walkStatus = "COMPLETE";
+    walkTone = "pass";
+  } else if (
+    walkForward.status ===
+    "FAIL"
+  ) {
+    walkStatus = "FAILED";
+    walkTone = "fail";
+  } else {
+    walkStatus = "LOCKED";
+    walkTone = "locked";
+  }
+
+
+  const monteCarloStatus =
+    "LOCKED";
+
+
+  const paperStatus =
+    "LOCKED";
+
+
+  const liveStatus =
+    "LOCKED";
+
+
+  return {
+
+    header:
+      historicalStatus === "COMPLETE"
+        ? "HISTORICAL BACKTEST COMPLETE"
+        : "HISTORICAL BACKTEST FAILED",
+
+    stages: [
+
+      {
+        number: "01",
+        title: "Historical Backtest",
+        status: historicalStatus,
+        active:
+          historicalStatus === "COMPLETE",
+        tone:
+          historicalStatus === "COMPLETE"
+            ? "pass"
+            : "fail"
+      },
+
+      {
+        number: "02",
+        title: "Research Engine",
+        status:
+          researchEngine?.available
+            ? researchEngine.status
+            : "LOCKED",
+        active:
+          researchEngine?.available,
+        tone:
+          researchEngine?.status ===
+          "COMPLETE"
+            ? "pass"
+            : researchEngine?.status ===
+            "FAILED"
+            ? "fail"
+            : "locked"
+      },
+
+      {
+        number: "03",
+        title: "Robustness Testing",
+        status:
+          robustnessStatus,
+        active:
+          robustnessStatus ===
+          "READY",
+        tone:
+          robustnessTone
+      },
+
+      {
+        number: "04",
+        title: "Out-of-Sample Testing",
+        status:
+          oosStatus,
+        active:
+          oosStatus ===
+          "COMPLETE",
+        tone:
+          oosTone
+      },
+
+      {
+        number: "05",
+        title: "Walk-Forward Validation",
+        status:
+          walkStatus,
+        active:
+          walkStatus ===
+          "COMPLETE" ||
+          walkStatus ===
+          "FAILED",
+        tone:
+          walkTone
+      },
+
+      {
+        number: "06",
+        title: "Monte Carlo Analysis",
+        status:
+          monteCarloStatus,
+        active: false,
+        tone: "locked"
+      },
+
+      {
+        number: "07",
+        title: "Paper Trading",
+        status:
+          paperStatus,
+        active: false,
+        tone: "locked"
+      },
+
+      {
+        number: "08",
+        title: "Controlled Live Test",
+        status:
+          liveStatus,
+        active: false,
+        tone: "locked"
+      }
+
+    ]
+  };
+}
+
+
+/* ============================================================
+   RESEARCH ENGINE CARD
+   ============================================================ */
+
+function ResearchEngineCard({
+  researchEngine
 }) {
-  const researchReady =
-    research.hasResearch;
 
-  const oosReady =
-    research.oosAvailable;
+  const complete =
+    researchEngine.status ===
+    "COMPLETE";
 
-  /*
-   * IMPORTANT:
-   *
-   * Walk-forward is NOT considered complete merely
-   * because a walk_forward object/property exists.
-   *
-   * It requires concrete completed fold evidence.
-   */
-  const walkForwardReady =
-    research.walkForwardAvailable;
+
+  const failed =
+    researchEngine.status ===
+    "FAILED";
+
+
+  const color =
+    failed
+      ? "#ff9b9b"
+      : complete
+      ? "#a8e6bb"
+      : "#d3d9e5";
+
+
+  const border =
+    failed
+      ? "#6b3038"
+      : complete
+      ? "#315f42"
+      : "#394052";
+
 
   return (
-    <div style={styles.stageBox}>
+    <div
+      style={{
+        ...styles.engineCard,
+        borderColor: border
+      }}
+    >
 
-      <div style={styles.stageHeader}>
+      <div style={styles.engineHeader}>
 
-        <span style={styles.stageLabel}>
-          VALIDATION PIPELINE
-        </span>
+        <div>
 
-        <span style={styles.stageCurrent}>
-          HISTORICAL BACKTEST COMPLETE
-        </span>
+          <div style={styles.gateEyebrow}>
+            ATLAS RESEARCH ENGINE
+          </div>
+
+          <div
+            style={{
+              ...styles.engineTitle,
+              color
+            }}
+          >
+            {failed
+              ? "RESEARCH ENGINE FAILED"
+              : complete
+              ? "RESEARCH COMPLETE"
+              : "RESEARCH ENGINE"}
+          </div>
+
+        </div>
+
+        <div
+          style={{
+            ...styles.engineStatus,
+            color
+          }}
+        >
+          {researchEngine.status}
+        </div>
 
       </div>
 
-      <div style={styles.stageList}>
 
-        <Stage
-          number="01"
-          title="Historical Backtest"
-          status="COMPLETE"
-          active
-        />
+      <div style={styles.engineMessage}>
+        {researchEngine.message}
+      </div>
 
-        <Stage
-          number="02"
-          title="Research Engine"
-          status={
-            researchReady
-              ? "COMPLETE"
-              : "PENDING"
-          }
-          active={
-            researchReady
+
+      <div style={styles.engineGrid}>
+
+        <MiniMetric
+          label="RESEARCH VERDICT"
+          value={
+            researchEngine.verdict
           }
         />
 
-        <Stage
-          number="03"
-          title="Robustness Testing"
-          status={
-            researchReady
-              ? robustness.nextStage
-                ? "NEXT"
-                : "REVIEW"
-              : "LOCKED"
-          }
-          active={
-            researchReady &&
-            robustness.nextStage
+        <MiniMetric
+          label="RESEARCH SCORE"
+          value={
+            researchEngine.score == null
+              ? "N/A"
+              : `${researchEngine.score}/100`
           }
         />
 
-        <Stage
-          number="04"
-          title="Out-of-Sample Testing"
-          status={
-            oosReady
-              ? "AVAILABLE"
-              : "LOCKED"
-          }
-          active={
-            oosReady
+        <MiniMetric
+          label="OOS"
+          value={
+            researchEngine.oosStatus ===
+            "N/A"
+              ? "N/A"
+              : researchEngine.oosStatus
           }
         />
 
-        <Stage
-          number="05"
-          title="Walk-Forward Validation"
-          status={
-            walkForwardReady
-              ? "AVAILABLE"
-              : "LOCKED"
+        <MiniMetric
+          label="WALK-FORWARD"
+          value={
+            researchEngine.walkForward.status
           }
-          active={
-            walkForwardReady
-          }
-        />
-
-        <Stage
-          number="06"
-          title="Monte Carlo Analysis"
-          status="LOCKED"
-        />
-
-        <Stage
-          number="07"
-          title="Paper Trading"
-          status="LOCKED"
-        />
-
-        <Stage
-          number="08"
-          title="Controlled Live Test"
-          status="LOCKED"
         />
 
       </div>
@@ -947,802 +1437,26 @@ function ValidationPipeline({
 
 
 /* ============================================================
-   RESEARCH ASSESSMENT
+   MINI METRIC
    ============================================================ */
 
-function buildResearchAssessment(
-  results
-) {
-  const research =
-    results?.research ||
-    null;
-
-  const explicitStatus =
-    results?.research_status ||
-    null;
-
-  const researchError =
-    results?.research_error ||
-    null;
-
-
-  if (!research) {
-
-    if (
-      explicitStatus ===
-      "FAILED"
-    ) {
-      return {
-        status: "FAILED",
-
-        label:
-          "RESEARCH ENGINE FAILED",
-
-        color:
-          "#ff9b9b",
-
-        border:
-          "#6b3038",
-
-        message:
-          researchError ||
-          "The historical backtest completed, but the Research Engine did not complete.",
-
-        hasResearch:
-          false,
-
-        isAvailable:
-          false,
-
-        oosAvailable:
-          false,
-
-        walkForwardAvailable:
-          false,
-
-        experiments:
-          [],
-
-        nextAction:
-          "Review Research Engine failure",
-
-        nextActionMessage:
-          "The historical backtest remains preserved. Resolve the Research Engine failure before treating the strategy as research validated."
-      };
-    }
-
-
-    return {
-      status:
-        explicitStatus ||
-        "NOT RUN",
-
-      label:
-        "RESEARCH VALIDATION PENDING",
-
-      color:
-        "#ffcf8a",
-
-      border:
-        "#66502d",
-
-      message:
-        "The historical backtest is available, but no completed Research Engine result is attached yet.",
-
-      hasResearch:
-        false,
-
-      isAvailable:
-        false,
-
-      oosAvailable:
-        false,
-
-      walkForwardAvailable:
-        false,
-
-      experiments:
-        [],
-
-      nextAction:
-        "Run Research Engine",
-
-      nextActionMessage:
-        "Pass the completed backtest job to the Research Engine before advancing toward robustness or live validation."
-    };
-  }
-
-
-  const verdict =
-    firstValue(
-      research,
-      [
-        "verdict",
-        "research_verdict",
-        "final_verdict"
-      ]
-    );
-
-
-  const score =
-    firstNumber(
-      research,
-      [
-        "score",
-        "research_score",
-        "readiness_score"
-      ]
-    );
-
-
-  const isAvailable =
-    hasAny(
-      research,
-      [
-        "in_sample",
-        "is",
-        "inSample",
-        "in_sample_results"
-      ]
-    );
-
-
-  const oosAvailable =
-    hasCompletedValidationEvidence(
-      research,
-      [
-        "out_of_sample",
-        "oos",
-        "outOfSample",
-        "out_of_sample_results"
-      ]
-    );
-
-
-  /*
-   * DO NOT use hasAny() here.
-   *
-   * A property such as:
-   *
-   * walk_forward: {}
-   *
-   * does not mean walk-forward validation has
-   * actually happened.
-   *
-   * The current Supabase database has zero
-   * walk_forward_folds, therefore this must
-   * evaluate to false.
-   */
-  const walkForwardAvailable =
-    hasCompletedWalkForwardEvidence(
-      research
-    );
-
-
-  const experiments =
-    extractExperiments(
-      research
-    );
-
-
-  const validated =
-    isValidatedVerdict(
-      verdict
-    );
-
-
-  return {
-    status:
-      "COMPLETE",
-
-    label:
-      validated
-        ? "RESEARCH VALIDATED"
-        : "RESEARCH COMPLETE",
-
-    color:
-      validated
-        ? "#a8e6bb"
-        : "#d3d9e5",
-
-    border:
-      validated
-        ? "#315f42"
-        : "#394052",
-
-    message:
-      buildResearchMessage(
-        verdict,
-        validated
-      ),
-
-    hasResearch:
-      true,
-
-    verdict,
-
-    score,
-
-    isAvailable,
-
-    oosAvailable,
-
-    walkForwardAvailable,
-
-    experiments,
-
-    nextAction:
-      validated
-        ? "Proceed to next validation gate"
-        : "Review research evidence",
-
-    nextActionMessage:
-      validated
-        ? "The Research Engine has produced evidence supporting progression. Continue with the remaining statistical validation gates before paper trading."
-        : "Review the Research Engine experiments and validation results before granting progression."
-  };
-}
-
-
-/* ============================================================
-   COMPLETED VALIDATION EVIDENCE
-   ============================================================ */
-
-function hasCompletedValidationEvidence(
-  research,
-  keys
-) {
-  if (!research) {
-    return false;
-  }
-
-
-  for (
-    const key of keys
-  ) {
-    const value =
-      research[key];
-
-    if (
-      value == null
-    ) {
-      continue;
-    }
-
-
-    /*
-     * Arrays require at least one
-     * concrete validation result.
-     */
-    if (
-      Array.isArray(value)
-    ) {
-      if (
-        value.length > 0
-      ) {
-        return true;
-      }
-
-      continue;
-    }
-
-
-    /*
-     * Numeric counts are accepted
-     * only when greater than zero.
-     */
-    if (
-      typeof value ===
-      "number"
-    ) {
-      if (
-        Number.isFinite(value) &&
-        value > 0
-      ) {
-        return true;
-      }
-
-      continue;
-    }
-
-
-    /*
-     * Objects need actual evidence.
-     */
-    if (
-      typeof value ===
-      "object"
-    ) {
-
-      const count =
-        firstNumber(
-          value,
-          [
-            "completed_folds",
-            "completed",
-            "fold_count",
-            "folds_count",
-            "count",
-            "total"
-          ]
-        );
-
-      if (
-        count != null &&
-        count > 0
-      ) {
-        return true;
-      }
-
-
-      const folds =
-        value.folds ||
-        value.results ||
-        value.fold_results;
-
-
-      if (
-        Array.isArray(folds) &&
-        folds.length > 0
-      ) {
-        return true;
-      }
-
-
-      if (
-        folds &&
-        typeof folds ===
-          "object" &&
-        Object.keys(folds).length > 0
-      ) {
-        return true;
-      }
-
-
-      if (
-        value.completed ===
-          true
-      ) {
-        return true;
-      }
-
-
-      if (
-        String(
-          value.status ||
-          ""
-        ).toLowerCase() ===
-          "completed"
-      ) {
-        return true;
-      }
-    }
-  }
-
-
-  return false;
-}
-
-
-/* ============================================================
-   WALK-FORWARD EVIDENCE
-   ============================================================ */
-
-function hasCompletedWalkForwardEvidence(
-  research
-) {
-  if (!research) {
-    return false;
-  }
-
-
-  const candidates = [
-    research.walk_forward,
-    research.walkForward,
-    research.walk_forward_results,
-    research.walkForwardResults,
-    research.walk_forward_validation,
-    research.walkForwardValidation
-  ];
-
-
-  for (
-    const value of candidates
-  ) {
-
-    if (
-      value == null
-    ) {
-      continue;
-    }
-
-
-    /*
-     * A list of folds is direct evidence.
-     */
-    if (
-      Array.isArray(value)
-    ) {
-      if (
-        value.length > 0
-      ) {
-        return true;
-      }
-
-      continue;
-    }
-
-
-    /*
-     * Numeric fold count.
-     */
-    if (
-      typeof value ===
-      "number"
-    ) {
-      if (
-        Number.isFinite(value) &&
-        value > 0
-      ) {
-        return true;
-      }
-
-      continue;
-    }
-
-
-    if (
-      typeof value !==
-      "object"
-    ) {
-      continue;
-    }
-
-
-    /*
-     * Explicit fold counts.
-     */
-    const foldCount =
-      firstNumber(
-        value,
-        [
-          "completed_folds",
-          "completedFoldCount",
-          "fold_count",
-          "foldCount",
-          "folds_count",
-          "total_folds",
-          "totalFolds"
-        ]
-      );
-
-
-    if (
-      foldCount != null &&
-      foldCount > 0
-    ) {
-      return true;
-    }
-
-
-    /*
-     * Actual fold arrays/results.
-     */
-    const folds =
-      value.folds ||
-      value.fold_results ||
-      value.foldResults ||
-      value.results;
-
-
-    if (
-      Array.isArray(folds) &&
-      folds.length > 0
-    ) {
-      return true;
-    }
-
-
-    if (
-      folds &&
-      typeof folds ===
-        "object" &&
-      Object.keys(folds).length > 0
-    ) {
-      return true;
-    }
-
-
-    /*
-     * Explicit completion flag.
-     */
-    if (
-      value.completed ===
-        true
-    ) {
-      return true;
-    }
-
-
-    /*
-     * Explicit completed status.
-     */
-    if (
-      String(
-        value.status ||
-        ""
-      ).toLowerCase() ===
-        "completed"
-    ) {
-      return true;
-    }
-  }
-
-
-  /*
-   * No concrete fold evidence.
-   *
-   * This is intentionally false.
-   */
-  return false;
-}
-
-
-/* ============================================================
-   RESEARCH MESSAGE
-   ============================================================ */
-
-function buildResearchMessage(
-  verdict,
-  validated
-) {
-  if (validated) {
-    return (
-      "The Research Engine completed its validation workflow and the recorded research verdict supports progression beyond the initial historical backtest."
-    );
-  }
-
-
-  if (
-    verdict ===
-    "POSITIVE_EDGE_REQUIRES_VALIDATION"
-  ) {
-    return (
-      "The Research Engine found positive evidence, but the strategy still requires additional validation before advancement."
-    );
-  }
-
-
-  if (
-    verdict ===
-    "NO_POSITIVE_EDGE"
-  ) {
-    return (
-      "The Research Engine did not establish a sufficiently reliable positive edge."
-    );
-  }
-
-
-  if (
-    verdict ===
-    "INSUFFICIENT_SAMPLE"
-  ) {
-    return (
-      "The Research Engine considers the available evidence insufficient for a reliable conclusion."
-    );
-  }
-
+function MiniMetric({
+  label,
+  value
+}) {
 
   return (
-    "The Research Engine completed. Review its detailed evidence before progression."
-  );
-}
+    <div style={styles.miniMetric}>
 
+      <div style={styles.miniLabel}>
+        {label}
+      </div>
 
-/* ============================================================
-   RESEARCH VERDICT DETECTION
-   ============================================================ */
+      <div style={styles.miniValue}>
+        {value}
+      </div>
 
-function isValidatedVerdict(
-  verdict
-) {
-  if (!verdict) {
-    return false;
-  }
-
-
-  const normalized =
-    String(verdict)
-      .toUpperCase();
-
-
-  /*
-   * A generic WALK_FORWARD string should NOT
-   * automatically validate the strategy.
-   *
-   * The actual fold evidence is checked separately.
-   */
-  return normalized.includes(
-    "VALIDATED"
-  );
-}
-
-
-/* ============================================================
-   EXPERIMENT EXTRACTION
-   ============================================================ */
-
-function extractExperiments(
-  research
-) {
-  const source =
-    research?.experiments ||
-    research?.experiment_results ||
-    research?.experiments_results ||
-    null;
-
-
-  if (
-    Array.isArray(source)
-  ) {
-    return source.map(
-      (
-        experiment,
-        index
-      ) => ({
-        id:
-          String(
-            experiment?.id ||
-            experiment?.name ||
-            index
-          ),
-
-        name:
-          experiment?.name ||
-          experiment?.label ||
-          `Experiment ${index + 1}`,
-
-        passed:
-          Boolean(
-            experiment?.passed ??
-            experiment?.positive ??
-            experiment?.profitable ??
-            Number(
-              experiment?.expectancy_R
-            ) > 0
-          ),
-
-        detail:
-          buildExperimentDetail(
-            experiment
-          )
-      })
-    );
-  }
-
-
-  if (
-    source &&
-    typeof source ===
-      "object"
-  ) {
-    return Object.entries(
-      source
-    ).map(
-      (
-        [
-          key,
-          experiment
-        ]
-      ) => ({
-        id:
-          key,
-
-        name:
-          experiment?.name ||
-          key,
-
-        passed:
-          Boolean(
-            experiment?.passed ??
-            experiment?.positive ??
-            experiment?.profitable ??
-            Number(
-              experiment?.expectancy_R
-            ) > 0
-          ),
-
-        detail:
-          buildExperimentDetail(
-            experiment
-          )
-      })
-    );
-  }
-
-
-  return [];
-}
-
-
-/* ============================================================
-   EXPERIMENT DETAIL
-   ============================================================ */
-
-function buildExperimentDetail(
-  experiment
-) {
-  if (!experiment) {
-    return "";
-  }
-
-
-  const parts = [];
-
-
-  const pf =
-    firstNumber(
-      experiment,
-      [
-        "pf",
-        "profit_factor",
-        "profitFactor"
-      ]
-    );
-
-
-  const expectancy =
-    firstNumber(
-      experiment,
-      [
-        "expectancy_R",
-        "expectancy",
-        "expectancy_r"
-      ]
-    );
-
-
-  const totalR =
-    firstNumber(
-      experiment,
-      [
-        "totalR",
-        "total_r",
-        "net_R",
-        "net_result_R"
-      ]
-    );
-
-
-  if (
-    pf != null
-  ) {
-    parts.push(
-      `PF ${pf.toFixed(2)}`
-    );
-  }
-
-
-  if (
-    expectancy != null
-  ) {
-    parts.push(
-      `Expectancy ${expectancy.toFixed(3)} R`
-    );
-  }
-
-
-  if (
-    totalR != null
-  ) {
-    parts.push(
-      `Net ${totalR.toFixed(2)} R`
-    );
-  }
-
-
-  return parts.join(
-    " · "
+    </div>
   );
 }
 
@@ -1755,6 +1469,7 @@ function buildRobustnessAssessment(
   results,
   metrics
 ) {
+
   const {
     pf,
     expectancy,
@@ -1765,35 +1480,31 @@ function buildRobustnessAssessment(
 
 
   const diagnostics =
-    results?.diagnostics ||
-    {};
+    results?.diagnostics || {};
 
 
   const years =
-    diagnostics.years ||
-    {};
+    diagnostics.years || {};
+
 
   const months =
-    diagnostics.months ||
-    {};
+    diagnostics.months || {};
+
 
   const directions =
-    diagnostics.directions ||
-    {};
+    diagnostics.directions || {};
+
 
   const sessions =
-    diagnostics.sessions ||
-    {};
+    diagnostics.sessions || {};
+
 
   const volatility =
-    diagnostics.volatility ||
-    {};
+    diagnostics.volatility || {};
 
 
   const sampleTrades =
-    Number(
-      trades || 0
-    );
+    Number(trades || 0);
 
 
   const finiteNumber =
@@ -1812,6 +1523,7 @@ function buildRobustnessAssessment(
   const samplePass =
     sampleTrades >= 100;
 
+
   const sampleStrong =
     sampleTrades >= 300;
 
@@ -1824,6 +1536,7 @@ function buildRobustnessAssessment(
     Number.isFinite(pf) &&
     pf > 1;
 
+
   const pfStrong =
     Number.isFinite(pf) &&
     pf >= 1.30;
@@ -1834,15 +1547,12 @@ function buildRobustnessAssessment(
      ---------------------------------------------------------- */
 
   const expectancyPass =
-    Number.isFinite(
-      expectancy
-    ) &&
+    Number.isFinite(expectancy) &&
     expectancy > 0;
 
+
   const expectancyStrong =
-    Number.isFinite(
-      expectancy
-    ) &&
+    Number.isFinite(expectancy) &&
     expectancy >= 0.10;
 
 
@@ -1863,6 +1573,7 @@ function buildRobustnessAssessment(
     Number.isFinite(drawdown) &&
     drawdown < 0.25;
 
+
   const ddStrong =
     Number.isFinite(drawdown) &&
     drawdown < 0.15;
@@ -1873,18 +1584,14 @@ function buildRobustnessAssessment(
      ---------------------------------------------------------- */
 
   const yearEntries =
-    Object.values(
-      years || {}
-    );
+    Object.values(years || {});
 
 
   const validYears =
     yearEntries.filter(
       year =>
         Number.isFinite(
-          Number(
-            year?.totalR
-          )
+          Number(year?.totalR)
         )
     );
 
@@ -1892,9 +1599,7 @@ function buildRobustnessAssessment(
   const positiveYears =
     validYears.filter(
       year =>
-        Number(
-          year.totalR
-        ) > 0
+        Number(year.totalR) > 0
     );
 
 
@@ -1920,18 +1625,14 @@ function buildRobustnessAssessment(
      ---------------------------------------------------------- */
 
   const monthEntries =
-    Object.values(
-      months || {}
-    );
+    Object.values(months || {});
 
 
   const validMonths =
     monthEntries.filter(
       month =>
         Number.isFinite(
-          Number(
-            month?.totalR
-          )
+          Number(month?.totalR)
         )
     );
 
@@ -1939,9 +1640,7 @@ function buildRobustnessAssessment(
   const positiveMonths =
     validMonths.filter(
       month =>
-        Number(
-          month.totalR
-        ) > 0
+        Number(month.totalR) > 0
     );
 
 
@@ -2100,9 +1799,7 @@ function buildRobustnessAssessment(
   const mfeMaePass =
     mfeMaeAvailable &&
     averageMFE >
-      Math.abs(
-        averageMAE
-      );
+    Math.abs(averageMAE);
 
 
   const lossStreakAvailable =
@@ -2115,124 +1812,76 @@ function buildRobustnessAssessment(
 
 
   /* ----------------------------------------------------------
-     SCORE
+     FIXED SCORE
      ---------------------------------------------------------- */
 
   let score = 0;
 
 
-  if (
-    sampleStrong
-  ) {
+  if (sampleStrong) {
     score += 15;
-  } else if (
-    samplePass
-  ) {
+  } else if (samplePass) {
     score += 7.5;
   }
 
 
-  if (
-    pfStrong
-  ) {
+  if (pfStrong) {
     score += 15;
-  } else if (
-    pfPass
-  ) {
+  } else if (pfPass) {
     score += 7.5;
   }
 
 
-  if (
-    expectancyStrong
-  ) {
+  if (expectancyStrong) {
     score += 15;
-  } else if (
-    expectancyPass
-  ) {
+  } else if (expectancyPass) {
     score += 7.5;
   }
 
 
-  if (
-    totalRPass
-  ) {
+  if (totalRPass) {
     score += 10;
   }
 
 
-  if (
-    ddStrong
-  ) {
+  if (ddStrong) {
     score += 10;
-  } else if (
-    ddPass
-  ) {
+  } else if (ddPass) {
     score += 7.5;
   }
 
 
-  if (
-    yearStatus ===
-    "PASS"
-  ) {
+  if (yearStatus === "PASS") {
     score += 10;
-  } else if (
-    yearStatus ===
-    "WEAK"
-  ) {
+  } else if (yearStatus === "WEAK") {
     score += 5;
   }
 
 
-  if (
-    monthStatus ===
-    "PASS"
-  ) {
+  if (monthStatus === "PASS") {
     score += 5;
-  } else if (
-    monthStatus ===
-    "WEAK"
-  ) {
+  } else if (monthStatus === "WEAK") {
     score += 2.5;
   }
 
 
-  if (
-    directionStatus ===
-    "PASS"
-  ) {
+  if (directionStatus === "PASS") {
     score += 5;
-  } else if (
-    directionStatus ===
-    "WEAK"
-  ) {
+  } else if (directionStatus === "WEAK") {
     score += 2.5;
   }
 
 
-  if (
-    sessionStatus ===
-    "PASS"
-  ) {
+  if (sessionStatus === "PASS") {
     score += 5;
-  } else if (
-    sessionStatus ===
-    "WEAK"
-  ) {
+  } else if (sessionStatus === "WEAK") {
     score += 2.5;
   }
 
 
-  if (
-    volatilityStatus ===
-    "PASS"
-  ) {
+  if (volatilityStatus === "PASS") {
     score += 5;
-  } else if (
-    volatilityStatus ===
-    "WEAK"
-  ) {
+  } else if (volatilityStatus === "WEAK") {
     score += 2.5;
   }
 
@@ -2242,9 +1891,7 @@ function buildRobustnessAssessment(
       0,
       Math.min(
         100,
-        Math.round(
-          score
-        )
+        Math.round(score)
       )
     );
 
@@ -2258,8 +1905,7 @@ function buildRobustnessAssessment(
     {
       id: "sample",
       label: "Sample Size",
-      passed:
-        samplePass,
+      passed: samplePass,
       status:
         samplePass
           ? "PASS"
@@ -2271,8 +1917,7 @@ function buildRobustnessAssessment(
     {
       id: "profit-factor",
       label: "Profitability Quality",
-      passed:
-        pfPass,
+      passed: pfPass,
       status:
         pfPass
           ? "PASS"
@@ -2286,16 +1931,13 @@ function buildRobustnessAssessment(
     {
       id: "expectancy",
       label: "Positive Expectancy",
-      passed:
-        expectancyPass,
+      passed: expectancyPass,
       status:
         expectancyPass
           ? "PASS"
           : "FAIL",
       detail:
-        Number.isFinite(
-          expectancy
-        )
+        Number.isFinite(expectancy)
           ? `${expectancy.toFixed(3)} R`
           : "Unavailable"
     },
@@ -2303,16 +1945,13 @@ function buildRobustnessAssessment(
     {
       id: "net-result",
       label: "Positive Net Result",
-      passed:
-        totalRPass,
+      passed: totalRPass,
       status:
         totalRPass
           ? "PASS"
           : "FAIL",
       detail:
-        Number.isFinite(
-          totalR
-        )
+        Number.isFinite(totalR)
           ? `${totalR.toFixed(2)} R`
           : "Unavailable"
     },
@@ -2320,16 +1959,13 @@ function buildRobustnessAssessment(
     {
       id: "drawdown",
       label: "Drawdown Control",
-      passed:
-        ddPass,
+      passed: ddPass,
       status:
         ddPass
           ? "PASS"
           : "FAIL",
       detail:
-        Number.isFinite(
-          drawdown
-        )
+        Number.isFinite(drawdown)
           ? `${(
               drawdown * 100
             ).toFixed(2)}%`
@@ -2340,11 +1976,9 @@ function buildRobustnessAssessment(
       id: "year-consistency",
       label: "Year Consistency",
       passed:
-        yearStatus ===
-        "PASS",
+        yearStatus === "PASS",
       neutral:
-        yearStatus ===
-        "N/A",
+        yearStatus === "N/A",
       status:
         yearStatus,
       detail:
@@ -2359,11 +1993,9 @@ function buildRobustnessAssessment(
       id: "month-consistency",
       label: "Month Consistency",
       passed:
-        monthStatus ===
-        "PASS",
+        monthStatus === "PASS",
       neutral:
-        monthStatus ===
-        "N/A",
+        monthStatus === "N/A",
       status:
         monthStatus,
       detail:
@@ -2378,11 +2010,9 @@ function buildRobustnessAssessment(
       id: "direction",
       label: "Direction Stability",
       passed:
-        directionStatus ===
-        "PASS",
+        directionStatus === "PASS",
       neutral:
-        directionStatus ===
-        "N/A",
+        directionStatus === "N/A",
       status:
         directionStatus,
       detail:
@@ -2395,11 +2025,9 @@ function buildRobustnessAssessment(
       id: "sessions",
       label: "Session Stability",
       passed:
-        sessionStatus ===
-        "PASS",
+        sessionStatus === "PASS",
       neutral:
-        sessionStatus ===
-        "N/A",
+        sessionStatus === "N/A",
       status:
         sessionStatus,
       detail:
@@ -2412,11 +2040,9 @@ function buildRobustnessAssessment(
       id: "volatility",
       label: "Volatility Stability",
       passed:
-        volatilityStatus ===
-        "PASS",
+        volatilityStatus === "PASS",
       neutral:
-        volatilityStatus ===
-        "N/A",
+        volatilityStatus === "N/A",
       status:
         volatilityStatus,
       detail:
@@ -2508,9 +2134,7 @@ function buildRobustnessAssessment(
   let nextActionMessage;
 
 
-  if (
-    !coreEstablished
-  ) {
+  if (!coreEstablished) {
 
     label =
       "EDGE NOT ESTABLISHED";
@@ -2531,7 +2155,7 @@ function buildRobustnessAssessment(
       "Improve or reject the strategy";
 
     nextActionMessage =
-      "Do not advance until sample size, profitability, expectancy and net result provide credible positive evidence.";
+      "Do not advance to robustness testing until sample size, profitability, expectancy and net result provide credible positive evidence.";
 
   } else if (
     normalizedScore >= 55 &&
@@ -2557,7 +2181,7 @@ function buildRobustnessAssessment(
       "Strengthen historical evidence";
 
     nextActionMessage =
-      "Investigate consistency across years, months, sessions, directions and volatility regimes before advancing.";
+      "Increase the sample and investigate consistency across years, months, sessions, directions and volatility regimes.";
 
   } else if (
     robustnessCandidate
@@ -2617,29 +2241,10 @@ function buildRobustnessAssessment(
     color,
     border,
     message,
-
     nextStage,
-
     nextAction,
-
     nextActionMessage,
-
     checks,
-
-    yearConsistency,
-    yearStatus,
-
-    monthConsistency,
-    monthStatus,
-
-    directionRatio,
-    directionStatus,
-
-    sessionRatio,
-    sessionStatus,
-
-    volatilityRatio,
-    volatilityStatus,
 
     tradeQuality: {
       mfeMaeAvailable,
@@ -2652,51 +2257,6 @@ function buildRobustnessAssessment(
 
 
 /* ============================================================
-   HISTORICAL DIAGNOSTIC
-   ============================================================ */
-
-function HistoricalDiagnostic({
-  label,
-  value,
-  status,
-  emptyText,
-  suffix
-}) {
-  let detail;
-
-
-  if (
-    value == null
-  ) {
-    detail =
-      emptyText;
-  } else {
-    detail =
-      `${(
-        value * 100
-      ).toFixed(1)}% ${suffix}`;
-  }
-
-
-  return (
-    <Diagnostic
-      label={label}
-      passed={
-        status ===
-        "PASS"
-      }
-      neutral={
-        status ===
-        "N/A"
-      }
-      status={status}
-      detail={detail}
-    />
-  );
-}
-
-
-/* ============================================================
    STABILITY STATUS
    ============================================================ */
 
@@ -2704,24 +2264,21 @@ function getStabilityStatus(
   ratio,
   thresholds
 ) {
-  if (
-    ratio == null
-  ) {
+
+  if (ratio == null) {
     return "N/A";
   }
 
 
   if (
-    ratio >=
-    thresholds.pass
+    ratio >= thresholds.pass
   ) {
     return "PASS";
   }
 
 
   if (
-    ratio >=
-    thresholds.weak
+    ratio >= thresholds.weak
   ) {
     return "WEAK";
   }
@@ -2732,141 +2289,20 @@ function getStabilityStatus(
 
 
 /* ============================================================
-   GENERIC VALUE HELPERS
-   ============================================================ */
-
-function firstValue(
-  object,
-  keys
-) {
-  if (!object) {
-    return null;
-  }
-
-
-  for (
-    const key of keys
-  ) {
-    if (
-      object[key] != null
-    ) {
-      return object[key];
-    }
-  }
-
-
-  return null;
-}
-
-
-function firstNumber(
-  object,
-  keys
-) {
-  const value =
-    firstValue(
-      object,
-      keys
-    );
-
-
-  if (
-    value == null
-  ) {
-    return null;
-  }
-
-
-  const number =
-    Number(value);
-
-
-  return Number.isFinite(
-    number
-  )
-    ? number
-    : null;
-}
-
-
-function hasAny(
-  object,
-  keys
-) {
-  if (!object) {
-    return false;
-  }
-
-
-  return keys.some(
-    key =>
-      object[key] != null
-  );
-}
-
-
-/* ============================================================
-   RESEARCH ENGINE STYLE
-   ============================================================ */
-
-function getResearchEngineStyle(
-  status
-) {
-  if (
-    status ===
-    "COMPLETE"
-  ) {
-    return {
-      color:
-        "#a8e6bb",
-
-      border:
-        "#315f42"
-    };
-  }
-
-
-  if (
-    status ===
-    "FAILED"
-  ) {
-    return {
-      color:
-        "#ff9b9b",
-
-      border:
-        "#6b3038"
-    };
-  }
-
-
-  return {
-    color:
-      "#ffcf8a",
-
-    border:
-      "#66502d"
-  };
-}
-
-
-/* ============================================================
    VERDICT STYLE
    ============================================================ */
 
 function getVerdictStyle(
   verdict
 ) {
+
   if (
     verdict ===
     "POSITIVE EDGE"
   ) {
     return {
-      border:
-        "#315f42",
-
-      color:
-        "#a8e6bb"
+      border: "#315f42",
+      color: "#a8e6bb"
     };
   }
 
@@ -2876,11 +2312,8 @@ function getVerdictStyle(
     "NO EDGE"
   ) {
     return {
-      border:
-        "#6b3038",
-
-      color:
-        "#ff9b9b"
+      border: "#6b3038",
+      color: "#ff9b9b"
     };
   }
 
@@ -2890,21 +2323,15 @@ function getVerdictStyle(
     "INSUFFICIENT SAMPLE"
   ) {
     return {
-      border:
-        "#394052",
-
-      color:
-        "#d3d9e5"
+      border: "#394052",
+      color: "#d3d9e5"
     };
   }
 
 
   return {
-    border:
-      "#394052",
-
-    color:
-      "#d3d9e5"
+    border: "#394052",
+    color: "#d3d9e5"
   };
 }
 
@@ -2917,16 +2344,38 @@ function Stage({
   number,
   title,
   status,
-  active = false
+  active = false,
+  tone
 }) {
+
+  const toneColor =
+    tone === "pass"
+      ? "#a8e6bb"
+      : tone === "fail"
+      ? "#ff9b9b"
+      : tone === "neutral"
+      ? "#ffcf8a"
+      : active
+      ? "#d3d9e5"
+      : "#687386";
+
+
+  const numberBorder =
+    tone === "pass"
+      ? "#697f71"
+      : tone === "fail"
+      ? "#6b3038"
+      : active
+      ? "#697589"
+      : "#293243";
+
+
   return (
     <div
       style={{
         ...styles.stage,
-
         opacity:
-          status ===
-          "LOCKED"
+          status === "LOCKED"
             ? 0.45
             : 1
       }}
@@ -2935,28 +2384,24 @@ function Stage({
       <div
         style={{
           ...styles.stageNumber,
-
           borderColor:
-            active
-              ? "#697589"
-              : "#293243"
+            numberBorder
         }}
       >
         {number}
       </div>
 
+
       <div style={styles.stageName}>
         {title}
       </div>
 
+
       <div
         style={{
           ...styles.stageStatus,
-
           color:
-            active
-              ? "#d3d9e5"
-              : "#687386"
+            toneColor
         }}
       >
         {status}
@@ -2978,14 +2423,14 @@ function Diagnostic({
   neutral = false,
   status
 }) {
+
   let statusText;
   let statusColor;
 
 
   if (
     neutral ||
-    status ===
-      "N/A"
+    status === "N/A"
   ) {
 
     statusText =
@@ -2995,8 +2440,7 @@ function Diagnostic({
       "#7f899b";
 
   } else if (
-    status ===
-    "WEAK"
+    status === "WEAK"
   ) {
 
     statusText =
@@ -3006,8 +2450,7 @@ function Diagnostic({
       "#ffcf8a";
 
   } else if (
-    status ===
-    "FAIL"
+    status === "FAIL"
   ) {
 
     statusText =
@@ -3031,23 +2474,11 @@ function Diagnostic({
 
 
   return (
-    <div
-      style={
-        styles.diagnosticCard
-      }
-    >
+    <div style={styles.diagnosticCard}>
 
-      <div
-        style={
-          styles.diagnosticTop
-        }
-      >
+      <div style={styles.diagnosticTop}>
 
-        <span
-          style={
-            styles.cardLabel
-          }
-        >
+        <span style={styles.cardLabel}>
           {label}
         </span>
 
@@ -3063,11 +2494,8 @@ function Diagnostic({
 
       </div>
 
-      <div
-        style={
-          styles.diagnosticDetail
-        }
-      >
+
+      <div style={styles.diagnosticDetail}>
         {detail}
       </div>
 
@@ -3083,968 +2511,442 @@ function Diagnostic({
 const styles = {
 
   panel: {
-    background:
-      "#101520",
-
-    border:
-      "1px solid #1e2738",
-
-    borderRadius:
-      "18px",
-
-    padding:
-      "26px",
-
-    marginTop:
-      "28px"
+    background: "#101520",
+    border: "1px solid #1e2738",
+    borderRadius: "18px",
+    padding: "26px",
+    marginTop: "28px"
   },
 
 
   eyebrow: {
-    color:
-      "#7f899b",
-
-    fontSize:
-      "12px",
-
-    letterSpacing:
-      "1.5px",
-
-    marginBottom:
-      "8px"
+    color: "#7f899b",
+    fontSize: "12px",
+    letterSpacing: "1.5px",
+    marginBottom: "8px"
   },
 
 
   headerRow: {
-    display:
-      "flex",
-
-    justifyContent:
-      "space-between",
-
-    alignItems:
-      "flex-start"
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start"
   },
 
 
   panelTitle: {
-    fontSize:
-      "28px",
-
-    margin:
-      "8px 0"
+    fontSize: "28px",
+    margin: "8px 0"
   },
 
 
   description: {
-    color:
-      "#8d96a8",
-
-    lineHeight:
-      1.6,
-
-    maxWidth:
-      "720px",
-
-    marginBottom:
-      "0"
+    color: "#8d96a8",
+    lineHeight: 1.6,
+    maxWidth: "720px",
+    marginBottom: "0"
   },
 
 
   verdict: {
-    marginTop:
-      "24px",
-
-    padding:
-      "22px",
-
-    background:
-      "#080b12",
-
-    border:
-      "1px solid",
-
-    borderRadius:
-      "14px"
+    marginTop: "24px",
+    padding: "22px",
+    background: "#080b12",
+    border: "1px solid",
+    borderRadius: "14px"
   },
 
 
   verdictLabel: {
-    color:
-      "#7f899b",
-
-    fontSize:
-      "11px",
-
-    letterSpacing:
-      "1.5px"
+    color: "#7f899b",
+    fontSize: "11px",
+    letterSpacing: "1.5px"
   },
 
 
   verdictTitle: {
-    fontSize:
-      "28px",
-
-    fontWeight:
-      "700",
-
-    marginTop:
-      "8px"
+    fontSize: "28px",
+    fontWeight: "700",
+    marginTop: "8px"
   },
 
 
   verdictMessage: {
-    color:
-      "#8d96a8",
-
-    marginTop:
-      "8px",
-
-    lineHeight:
-      1.5
+    color: "#8d96a8",
+    marginTop: "8px",
+    lineHeight: 1.5
   },
 
 
-  researchEngine: {
-    marginTop:
-      "16px",
-
-    padding:
-      "20px",
-
-    background:
-      "#080b12",
-
-    border:
-      "1px solid",
-
-    borderRadius:
-      "14px"
+  engineCard: {
+    marginTop: "16px",
+    padding: "22px",
+    background: "#080b12",
+    border: "1px solid",
+    borderRadius: "14px"
   },
 
 
-  researchEngineHeader: {
-    display:
-      "flex",
-
-    justifyContent:
-      "space-between",
-
-    alignItems:
-      "center",
-
-    gap:
-      "20px"
+  engineHeader: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+    gap: "18px"
   },
 
 
-  researchEngineEyebrow: {
-    color:
-      "#687386",
-
-    fontSize:
-      "10px",
-
-    letterSpacing:
-      "1.5px",
-
-    marginBottom:
-      "6px"
+  engineTitle: {
+    fontSize: "24px",
+    fontWeight: "700",
+    marginTop: "8px"
   },
 
 
-  researchEngineTitle: {
-    fontSize:
-      "20px",
-
-    fontWeight:
-      "700"
+  engineStatus: {
+    fontSize: "11px",
+    fontWeight: "700",
+    letterSpacing: "1px",
+    marginTop: "4px"
   },
 
 
-  researchEngineStatus: {
-    fontSize:
-      "11px",
-
-    letterSpacing:
-      "1px",
-
-    fontWeight:
-      "700"
+  engineMessage: {
+    color: "#8d96a8",
+    marginTop: "10px",
+    lineHeight: 1.5
   },
 
 
-  researchEngineMessage: {
-    marginTop:
-      "10px",
-
-    color:
-      "#8d96a8",
-
-    fontSize:
-      "13px",
-
-    lineHeight:
-      1.5
-  },
-
-
-  researchSummaryGrid: {
-    display:
-      "grid",
-
+  engineGrid: {
+    display: "grid",
     gridTemplateColumns:
-      "repeat(auto-fit, minmax(160px, 1fr))",
-
-    gap:
-      "10px",
-
-    marginTop:
-      "16px"
+      "repeat(auto-fit, minmax(180px, 1fr))",
+    gap: "14px",
+    marginTop: "18px"
   },
 
 
-  researchMetric: {
-    background:
-      "#0b1019",
-
-    border:
-      "1px solid #1e2738",
-
-    borderRadius:
-      "10px",
-
-    padding:
-      "12px"
+  miniMetric: {
+    background: "#0b1019",
+    border: "1px solid #1e2738",
+    borderRadius: "12px",
+    padding: "16px"
   },
 
 
-  researchMetricLabel: {
-    color:
-      "#687386",
-
-    fontSize:
-      "9px",
-
-    letterSpacing:
-      "1px",
-
-    textTransform:
-      "uppercase"
+  miniLabel: {
+    color: "#687386",
+    fontSize: "10px",
+    letterSpacing: "1px"
   },
 
 
-  researchMetricValue: {
-    color:
-      "#d3d9e5",
-
-    fontSize:
-      "13px",
-
-    fontWeight:
-      "700",
-
-    marginTop:
-      "6px",
-
-    wordBreak:
-      "break-word"
+  miniValue: {
+    color: "#d3d9e5",
+    fontSize: "15px",
+    fontWeight: "700",
+    marginTop: "8px",
+    wordBreak: "break-word"
   },
 
 
   robustnessGate: {
-    marginTop:
-      "16px",
-
-    padding:
-      "20px",
-
-    background:
-      "#080b12",
-
-    border:
-      "1px solid",
-
-    borderRadius:
-      "14px"
+    marginTop: "16px",
+    padding: "20px",
+    background: "#080b12",
+    border: "1px solid",
+    borderRadius: "14px"
   },
 
 
   gateHeader: {
-    display:
-      "flex",
-
-    justifyContent:
-      "space-between",
-
-    alignItems:
-      "center",
-
-    gap:
-      "20px"
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "20px"
   },
 
 
   gateEyebrow: {
-    color:
-      "#687386",
-
-    fontSize:
-      "10px",
-
-    letterSpacing:
-      "1.5px",
-
-    marginBottom:
-      "6px"
+    color: "#687386",
+    fontSize: "10px",
+    letterSpacing: "1.5px",
+    marginBottom: "6px"
   },
 
 
   gateTitle: {
-    fontSize:
-      "20px",
-
-    fontWeight:
-      "700"
+    fontSize: "20px",
+    fontWeight: "700"
   },
 
 
   gateScore: {
-    fontSize:
-      "26px",
-
-    fontWeight:
-      "700"
+    fontSize: "26px",
+    fontWeight: "700"
   },
 
 
   gateScoreSmall: {
-    color:
-      "#687386",
-
-    fontSize:
-      "13px",
-
-    fontWeight:
-      "400"
+    color: "#687386",
+    fontSize: "13px",
+    fontWeight: "400"
   },
 
 
   gateMessage: {
-    marginTop:
-      "10px",
-
-    color:
-      "#8d96a8",
-
-    fontSize:
-      "13px",
-
-    lineHeight:
-      1.5
+    marginTop: "10px",
+    color: "#8d96a8",
+    fontSize: "13px",
+    lineHeight: 1.5
   },
 
 
   progressTrack: {
-    height:
-      "6px",
-
-    background:
-      "#111722",
-
-    borderRadius:
-      "20px",
-
-    overflow:
-      "hidden",
-
-    marginTop:
-      "16px"
+    height: "6px",
+    background: "#111722",
+    borderRadius: "20px",
+    overflow: "hidden",
+    marginTop: "16px"
   },
 
 
   progressBar: {
-    height:
-      "100%",
-
-    borderRadius:
-      "20px",
-
-    transition:
-      "width 0.3s ease"
+    height: "100%",
+    borderRadius: "20px",
+    transition: "width 0.3s ease"
   },
 
 
   stageBox: {
-    marginTop:
-      "18px",
-
-    padding:
-      "18px",
-
-    background:
-      "#0b1019",
-
-    border:
-      "1px solid #1e2738",
-
-    borderRadius:
-      "14px"
+    marginTop: "18px",
+    padding: "18px",
+    background: "#0b1019",
+    border: "1px solid #1e2738",
+    borderRadius: "14px"
   },
 
 
   stageHeader: {
-    display:
-      "flex",
-
-    justifyContent:
-      "space-between",
-
-    alignItems:
-      "center",
-
-    gap:
-      "12px",
-
-    marginBottom:
-      "12px",
-
-    flexWrap:
-      "wrap"
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "12px",
+    marginBottom: "12px",
+    flexWrap: "wrap"
   },
 
 
   stageLabel: {
-    color:
-      "#9da8bb",
-
-    fontSize:
-      "11px",
-
-    letterSpacing:
-      "1px",
-
-    fontWeight:
-      "700"
+    color: "#9da8bb",
+    fontSize: "11px",
+    letterSpacing: "1px",
+    fontWeight: "700"
   },
 
 
   stageCurrent: {
-    color:
-      "#596477",
-
-    fontSize:
-      "10px"
+    color: "#596477",
+    fontSize: "10px"
   },
 
 
   stageList: {
-    display:
-      "grid",
-
-    gap:
-      "7px"
+    display: "grid",
+    gap: "7px"
   },
 
 
   stage: {
-    display:
-      "grid",
-
+    display: "grid",
     gridTemplateColumns:
       "38px 1fr auto",
-
-    alignItems:
-      "center",
-
-    gap:
-      "12px",
-
-    padding:
-      "8px 0"
+    alignItems: "center",
+    gap: "12px",
+    padding: "8px 0"
   },
 
 
   stageNumber: {
-    width:
-      "28px",
-
-    height:
-      "28px",
-
-    border:
-      "1px solid",
-
-    borderRadius:
-      "50%",
-
-    display:
-      "flex",
-
-    alignItems:
-      "center",
-
-    justifyContent:
-      "center",
-
-    color:
-      "#9da8bb",
-
-    fontSize:
-      "10px"
+    width: "28px",
+    height: "28px",
+    border: "1px solid",
+    borderRadius: "50%",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    color: "#9da8bb",
+    fontSize: "10px"
   },
 
 
   stageName: {
-    color:
-      "#aeb7c7",
-
-    fontSize:
-      "12px"
+    color: "#aeb7c7",
+    fontSize: "12px"
   },
 
 
   stageStatus: {
-    fontSize:
-      "9px",
-
-    letterSpacing:
-      "1px",
-
-    fontWeight:
-      "700"
+    fontSize: "9px",
+    letterSpacing: "1px",
+    fontWeight: "700"
   },
 
 
   toggleButton: {
-    width:
-      "100%",
-
-    marginTop:
-      "16px",
-
-    padding:
-      "14px 16px",
-
-    background:
-      "#0b1019",
-
-    color:
-      "#aeb7c7",
-
-    border:
-      "1px solid #1e2738",
-
-    borderRadius:
-      "10px",
-
-    display:
-      "flex",
-
-    justifyContent:
-      "space-between",
-
-    alignItems:
-      "center",
-
-    fontSize:
-      "12px",
-
-    fontWeight:
-      "700",
-
-    letterSpacing:
-      "1px",
-
-    cursor:
-      "pointer"
+    width: "100%",
+    marginTop: "16px",
+    padding: "14px 16px",
+    background: "#0b1019",
+    color: "#aeb7c7",
+    border: "1px solid #1e2738",
+    borderRadius: "10px",
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    fontSize: "12px",
+    fontWeight: "700",
+    letterSpacing: "1px",
+    cursor: "pointer"
   },
 
 
   toggleIcon: {
-    fontSize:
-      "20px",
-
-    fontWeight:
-      "400",
-
-    lineHeight:
-      1
+    fontSize: "20px",
+    fontWeight: "400",
+    lineHeight: 1
   },
 
 
   details: {
-    marginTop:
-      "4px"
+    marginTop: "4px"
   },
 
 
   subsectionTitle: {
-    marginTop:
-      "22px",
-
-    marginBottom:
-      "12px",
-
-    color:
-      "#9da8bb",
-
-    fontSize:
-      "13px",
-
-    fontWeight:
-      "700"
+    marginTop: "22px",
+    marginBottom: "12px",
+    color: "#9da8bb",
+    fontSize: "13px",
+    fontWeight: "700"
   },
 
 
   diagnosticGrid: {
-    display:
-      "grid",
-
+    display: "grid",
     gridTemplateColumns:
       "repeat(auto-fit, minmax(200px, 1fr))",
-
-    gap:
-      "14px"
+    gap: "14px"
   },
 
 
   diagnosticCard: {
-    background:
-      "#080b12",
-
-    border:
-      "1px solid #1e2738",
-
-    borderRadius:
-      "12px",
-
-    padding:
-      "18px"
+    background: "#080b12",
+    border: "1px solid #1e2738",
+    borderRadius: "12px",
+    padding: "18px"
   },
 
 
   diagnosticTop: {
-    display:
-      "flex",
-
-    justifyContent:
-      "space-between",
-
-    alignItems:
-      "center",
-
-    gap:
-      "10px"
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: "10px"
   },
 
 
   cardLabel: {
-    color:
-      "#7f899b",
-
-    fontSize:
-      "14px"
+    color: "#7f899b",
+    fontSize: "14px"
   },
 
 
   status: {
-    fontSize:
-      "11px",
-
-    fontWeight:
-      "700",
-
-    letterSpacing:
-      "1px",
-
-    whiteSpace:
-      "nowrap"
+    fontSize: "11px",
+    fontWeight: "700",
+    letterSpacing: "1px",
+    whiteSpace: "nowrap"
   },
 
 
   diagnosticDetail: {
-    color:
-      "#a0a9ba",
-
-    fontSize:
-      "13px",
-
-    lineHeight:
-      1.5,
-
-    marginTop:
-      "10px"
-  },
-
-
-  researchDetailGrid: {
-    display:
-      "grid",
-
-    gridTemplateColumns:
-      "repeat(auto-fit, minmax(160px, 1fr))",
-
-    gap:
-      "12px"
-  },
-
-
-  emptyResearch: {
-    padding:
-      "18px",
-
-    background:
-      "#080b12",
-
-    border:
-      "1px solid #1e2738",
-
-    borderRadius:
-      "12px",
-
-    color:
-      "#7f899b",
-
-    fontSize:
-      "13px",
-
-    lineHeight:
-      1.5
-  },
-
-
-  experimentBox: {
-    marginTop:
-      "14px",
-
-    padding:
-      "18px",
-
-    background:
-      "#0b1019",
-
-    border:
-      "1px solid #1e2738",
-
-    borderRadius:
-      "12px"
-  },
-
-
-  experimentTitle: {
-    color:
-      "#d3d9e5",
-
-    fontSize:
-      "13px",
-
-    fontWeight:
-      "700",
-
-    marginBottom:
-      "10px"
-  },
-
-
-  experimentList: {
-    display:
-      "grid",
-
-    gap:
-      "8px"
-  },
-
-
-  experimentRow: {
-    display:
-      "flex",
-
-    justifyContent:
-      "space-between",
-
-    alignItems:
-      "center",
-
-    gap:
-      "12px",
-
-    padding:
-      "10px 0",
-
-    borderBottom:
-      "1px solid #1e2738"
-  },
-
-
-  experimentName: {
-    color:
-      "#aeb7c7",
-
-    fontSize:
-      "12px"
-  },
-
-
-  experimentDetail: {
-    color:
-      "#687386",
-
-    fontSize:
-      "11px",
-
-    marginTop:
-      "4px"
-  },
-
-
-  experimentStatus: {
-    fontSize:
-      "9px",
-
-    letterSpacing:
-      "1px",
-
-    fontWeight:
-      "700"
+    color: "#a0a9ba",
+    fontSize: "13px",
+    lineHeight: 1.5,
+    marginTop: "10px"
   },
 
 
   scoreMethod: {
-    marginTop:
-      "22px",
-
-    padding:
-      "18px",
-
-    borderRadius:
-      "12px",
-
-    background:
-      "#0b1019",
-
-    border:
-      "1px solid #1e2738"
+    marginTop: "22px",
+    padding: "18px",
+    borderRadius: "12px",
+    background: "#0b1019",
+    border: "1px solid #1e2738"
   },
 
 
   scoreMethodTitle: {
-    color:
-      "#d3d9e5",
-
-    fontSize:
-      "13px",
-
-    fontWeight:
-      "700"
+    color: "#d3d9e5",
+    fontSize: "13px",
+    fontWeight: "700"
   },
 
 
   scoreMethodText: {
-    marginTop:
-      "7px",
-
-    color:
-      "#7f899b",
-
-    fontSize:
-      "12px",
-
-    lineHeight:
-      1.5
+    marginTop: "7px",
+    color: "#7f899b",
+    fontSize: "12px",
+    lineHeight: 1.5
   },
 
 
   researchNote: {
-    marginTop:
-      "14px",
-
-    padding:
-      "18px",
-
-    borderRadius:
-      "12px",
-
-    background:
-      "#0b1019",
-
-    color:
-      "#9da8bb",
-
-    fontSize:
-      "13px",
-
-    lineHeight:
-      1.5
+    marginTop: "14px",
+    padding: "18px",
+    borderRadius: "12px",
+    background: "#0b1019",
+    color: "#9da8bb",
+    fontSize: "13px",
+    lineHeight: 1.5
   },
 
 
   researchNoteText: {
-    margin:
-      "8px 0 0"
+    margin: "8px 0 0"
   },
 
 
   nextAction: {
-    marginTop:
-      "14px",
-
-    padding:
-      "18px",
-
-    borderRadius:
-      "12px",
-
-    background:
-      "#080b12",
-
-    border:
-      "1px solid #1e2738"
+    marginTop: "14px",
+    padding: "18px",
+    borderRadius: "12px",
+    background: "#080b12",
+    border: "1px solid #1e2738"
   },
 
 
   nextActionLabel: {
-    color:
-      "#687386",
-
-    fontSize:
-      "10px",
-
-    letterSpacing:
-      "1.5px",
-
-    marginBottom:
-      "7px"
+    color: "#687386",
+    fontSize: "10px",
+    letterSpacing: "1.5px",
+    marginBottom: "7px"
   },
 
 
   nextActionTitle: {
-    color:
-      "#d3d9e5",
-
-    fontSize:
-      "15px",
-
-    fontWeight:
-      "700"
+    color: "#d3d9e5",
+    fontSize: "15px",
+    fontWeight: "700"
   },
 
 
   nextActionText: {
-    marginTop:
-      "6px",
-
-    color:
-      "#7f899b",
-
-    fontSize:
-      "12px",
-
-    lineHeight:
-      1.5
+    marginTop: "6px",
+    color: "#7f899b",
+    fontSize: "12px",
+    lineHeight: 1.5
   }
 
 };
-    
-    
-  
