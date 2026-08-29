@@ -2,8 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-import { supabase } from "../lib/supabase";
-
+import { supabase } from "../../lib/supabase";
 import {
   MARKET_ID,
   TIMEFRAME
