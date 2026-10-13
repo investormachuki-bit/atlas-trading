@@ -38,6 +38,8 @@ export default function SignalResultsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
+  const [scanning, setScanning] = useState(false);
+  const [notice, setNotice] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -66,6 +68,49 @@ export default function SignalResultsPage() {
 
   useEffect(() => { load(); }, [load]);
 
+
+  async function runScanner() {
+    if (scanning) return;
+    setScanning(true);
+    setError("");
+    setNotice("");
+    try {
+      const { data: auth, error: authError } = await supabase.auth.getUser();
+      if (authError || !auth?.user) {
+        window.location.href = "/login";
+        return;
+      }
+      const { data, error: invokeError } = await supabase.functions.invoke("atlas-signal-scanner", {
+        body: { market_id: "ee6cf0c3-1a03-48a9-9d76-7aa36ad62657", timeframe: "M5" }
+      });
+      if (invokeError) throw invokeError;
+      if (data?.status === "signal_published" && data?.signal_id) {
+        const { data: evaluated, error: evalError } = await supabase.functions.invoke("signal-outcome-evaluator", {
+          body: { signal_id: data.signal_id }
+        });
+        if (evalError) {
+          setNotice("Signal published, but evaluation needs attention: " + evalError.message);
+        } else {
+          setNotice("Signal published and evaluation initialized. Outcomes update as new candles arrive. " + (evaluated?.note || ""));
+        }
+      } else if (data?.status === "no_signal") {
+        setNotice("No setup qualified on the latest completed candle. No signal was fabricated.");
+      } else if (data?.status === "duplicate_prevented") {
+        setNotice("This candle was already processed; duplicate signal prevented.");
+      } else if (data?.status === "blocked") {
+        setNotice("Scanner blocked: " + (data?.reason || "market data not ready") + ". " + (data?.note || ""));
+      } else {
+        setNotice(data?.error || JSON.stringify(data));
+      }
+      await load();
+    } catch (e) {
+      console.error("ATLAS scanner failed", e);
+      setError(e?.message || "Scanner request failed.");
+    } finally {
+      setScanning(false);
+    }
+  }
+
   const visible = useMemo(() => rows.filter(r => filter === "all" || r.status === filter), [rows, filter]);
   const stats = useMemo(() => {
     const n = visible.length;
@@ -88,6 +133,7 @@ export default function SignalResultsPage() {
         </p>
         <div style={styles.actions}>
           <button style={styles.button} onClick={() => window.location.href = "/discovery"}>Strategy Discovery</button>
+          <button style={{ ...styles.button, background: "#101828", color: "#fff", borderColor: "#101828" }} onClick={runScanner} disabled={scanning}>{scanning ? "Checking latest candle…" : "Run live scanner"}</button>
           <button style={styles.button} onClick={load} disabled={loading}>{loading ? "Refreshing…" : "Refresh results"}</button>
           <label style={{ display: "flex", alignItems: "center", gap: 8, color: "#475467", fontSize: 13 }}>
             Status
@@ -104,6 +150,7 @@ export default function SignalResultsPage() {
         </div>
 
         {error ? <div style={styles.error}>{error}</div> : null}
+        {notice ? <div style={{ background: "#eef4ff", border: "1px solid #b2ccff", color: "#1849a9", padding: 12, borderRadius: 10, marginBottom: 16, lineHeight: 1.5 }}>{notice}</div> : null}
 
         <div style={styles.grid}>
           <Metric label="Recorded signals" value={stats.n} note="Rows available under your current access." />
