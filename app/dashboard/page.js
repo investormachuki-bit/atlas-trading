@@ -220,6 +220,15 @@ export default function Dashboard() {
           engine={running ? "RUNNING" : "READY"}
         />
 
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", margin: "0 0 18px" }}>
+          <a href="/signal-results" style={{ display: "inline-flex", alignItems: "center", padding: "10px 14px", borderRadius: 10, border: "1px solid #d0d5dd", background: "#fff", color: "#101828", fontWeight: 700, textDecoration: "none" }}>
+            Signal Results →
+          </a>
+          <a href="/discovery" style={{ display: "inline-flex", alignItems: "center", padding: "10px 14px", borderRadius: 10, border: "1px solid #d0d5dd", background: "#fff", color: "#101828", fontWeight: 700, textDecoration: "none" }}>
+            Strategy Discovery →
+          </a>
+        </div>
+
         <BacktestLab
           running={running}
           progress={progress}
