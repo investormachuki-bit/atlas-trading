@@ -457,7 +457,7 @@ export default function StrategyDiscovery() {
 
               <Metric
                 label="ENGINE"
-                value="1.0.0"
+                value="6.0.0"
               />
 
             </div>
