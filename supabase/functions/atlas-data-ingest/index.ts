@@ -22,6 +22,9 @@ Deno.serve(async (req: Request) => {
   const userClient = createClient(URL, ANON, { global: { headers: { Authorization: authorization } } });
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return out({ error: "Unauthorized" }, 401);
+  const appRole = String(user.app_metadata?.role || "").toLowerCase();
+  const ingestionAllowed = appRole === "admin" || appRole === "service_role" || user.app_metadata?.atlas_data_ingest === true;
+  if (!ingestionAllowed) return out({ error: "Market-data ingestion is restricted to trusted ingestion identities. Grant app_metadata.atlas_data_ingest=true or role=admin to the dedicated ingestion user." }, 403);
   let body: any;
   try { body = await req.json(); } catch { return out({ error: "Invalid JSON" }, 400); }
   if (!body.market_id || !/^[0-9a-f-]{36}$/i.test(body.market_id)) return out({ error: "Valid market_id UUID required" }, 400);
