@@ -948,6 +948,41 @@ function CandidateCard({
         </div>
 
 
+        {/* APPROXIMATE EXECUTION-COST SENSITIVITY */}
+
+        {Array.isArray(candidate.cost_sensitivity) && (
+          <div style={{ marginTop: "18px" }}>
+            <div style={styles.scoreLabel}>
+              HOLDOUT COST SENSITIVITY — ILLUSTRATIVE, NOT BROKER-VERIFIED
+            </div>
+            <div style={{ overflowX: "auto", marginTop: "10px" }}>
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: "12px", minWidth: "560px" }}>
+                <thead>
+                  <tr>
+                    {["COST CASE", "TRADES", "EXPECTANCY", "PROFIT FACTOR", "MAX DD"].map(label => (
+                      <th key={label} style={{ textAlign: "left", padding: "9px 8px", color: "#8d9ab0", borderBottom: "1px solid #293244" }}>{label}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {candidate.cost_sensitivity.map((scenario) => (
+                    <tr key={scenario.name}>
+                      <td style={{ padding: "9px 8px", borderBottom: "1px solid #202939", color: "#dce3ee" }}>{scenario.name}</td>
+                      <td style={{ padding: "9px 8px", borderBottom: "1px solid #202939" }}>{formatNumber(scenario.holdout?.trades)}</td>
+                      <td style={{ padding: "9px 8px", borderBottom: "1px solid #202939" }}>{formatR(scenario.holdout?.expectancy_R)}</td>
+                      <td style={{ padding: "9px 8px", borderBottom: "1px solid #202939" }}>{formatNumber(scenario.holdout?.profit_factor, 2)}</td>
+                      <td style={{ padding: "9px 8px", borderBottom: "1px solid #202939" }}>{formatPercent(scenario.holdout?.max_drawdown)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <p style={{ ...styles.bodyText, fontSize: "12px", marginTop: "8px" }}>
+              Cost cases are sensitivity assumptions only. They are not universal broker prices and cannot authorize a live strategy.
+            </p>
+          </div>
+        )}
+
         {/* TOTAL */}
 
         <div style={styles.candidateFooter}>
